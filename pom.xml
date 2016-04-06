@@ -43,10 +43,8 @@
                             </transformers>
                         </configuration>
                     </execution>
-                </executions>
-                
+                </executions>                
             </plugin>
-        </plugins>
-        
+        </plugins>       
     </build>
 </project>

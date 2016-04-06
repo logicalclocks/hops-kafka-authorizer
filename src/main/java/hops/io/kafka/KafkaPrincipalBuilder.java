@@ -12,7 +12,6 @@
  */
 package hops.io.kafka;
 
-import com.sun.security.auth.UserPrincipal;
 import java.util.Map;
 import java.security.Principal;
 
@@ -36,9 +35,9 @@ public class KafkaPrincipalBuilder implements PrincipalBuilder {
     /*
     *By default, the TLS user name will be of the form 
     * "CN=host1.example.com,OU=,O=Confluent,L=London,ST=London,C=GB".
-    *This builder class extracts host1.example.com as a userName, 
-    *gets the principalType and returns a KafkaPrincipal
-    */
+    *This builder class extracts host1.example.com.
+    *In our case it will be,  principalType:projectName__userName.
+     */
     @Override
     public Principal buildPrincipal(TransportLayer transportLayer, Authenticator authenticator) throws KafkaException {
         try {
@@ -46,13 +45,12 @@ public class KafkaPrincipalBuilder implements PrincipalBuilder {
             Principal principal = transportLayer.peerPrincipal();
             String[] TLSUserName = principal.getName().split(",", 6);
             String projetcName__userName = TLSUserName[0].split("=", 2)[1];
-            String userName = projetcName__userName.split("__", 2)[1];
             String userType = principal.toString().split(":", 2)[0];
-            
-            KafkaPrincipal userPrincipal = new KafkaPrincipal(userType, userName);
+
+            KafkaPrincipal userPrincipal = new KafkaPrincipal(userType, projetcName__userName);
             return userPrincipal;
         } catch (Exception e) {
-            throw new KafkaException("Failed to build principal due to: ", e);
+            throw new KafkaException("Failed to build Kafka principal due to: ", e);
         }
     }
 

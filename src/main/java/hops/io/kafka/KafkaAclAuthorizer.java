@@ -74,9 +74,7 @@ public class KafkaAclAuthorizer implements Authorizer {
 
         //initialize database connection. Can the type of database be passed in the configuration?
         connObject = new ConnectionObject("mysql");
-        
-        //load the acls from database into cache
-        loadCache();
+       
     }
 
     @Override
@@ -84,6 +82,9 @@ public class KafkaAclAuthorizer implements Authorizer {
 
         KafkaPrincipal principal = session.principal();
         String host = session.clientAddress().getHostAddress();
+         
+        //load the acls from database into cache
+        loadAllAcls();
         
         //get acls for this resource type
         java.util.Set<Acl> resourceAcls = JavaConverters$.MODULE$.setAsJavaSetConverter(getAcls(resource)).asJava();
@@ -199,32 +200,8 @@ public class KafkaAclAuthorizer implements Authorizer {
     @Override
     public boolean removeAcls(Set<Acl> aclsToBeRemoved, Resource resource) {
 
-        //does topic exist in database
-        Boolean topicExists = connObject.topicExists(resource.name());
-
-        if (topicExists) {
-            java.util.Set<Acl> existingAcls = JavaConverters$.MODULE$.setAsJavaSetConverter(getAcls(resource)).asJava();
-            java.util.Set<Acl> filteredAcls = new HashSet<>();
-            java.util.Iterator<Acl> iter = existingAcls.iterator();
-            while (iter.hasNext()) {
-                Acl acl = iter.next();
-                if (!aclsToBeRemoved.contains(acl)) {
-                    filteredAcls.add(acl);
-                }
-            }
-
-            //is topic acl modified
-            Boolean aclNeedsRemoval = existingAcls.equals(filteredAcls);
-            if (aclNeedsRemoval) {
-                if (!filteredAcls.isEmpty()) {
-                    connObject.removeAcls(resource.name(), JavaConverters$.MODULE$.setAsJavaSetConverter(aclsToBeRemoved).asJava());
-                } else {
-                    connObject.removeTopic(resource.name());
-                }
-            }
-            return aclNeedsRemoval;
-        }
-        return false;
+        return connObject.removeAcls(resource.name(), JavaConverters$.MODULE$
+                .setAsJavaSetConverter(aclsToBeRemoved).asJava());
     }
 
     @Override
@@ -237,54 +214,94 @@ public class KafkaAclAuthorizer implements Authorizer {
     @Override
     public Set<Acl> getAcls(Resource resource) {
 
-        java.util.Set<Acl> acls = new java.util.HashSet<>();
-        Set<AclRole> aclCache = null;
+        Acl acl;
+        KafkaPrincipal principal;
+        PermissionType permission;
+        String host;
+        Operation operation;
+
+        java.util.Set<Acl> aclSet = new java.util.HashSet<>();
+        ResultSet resultSet = connObject.getTopicAcls(resource.name());
 
         try {
-            lock.readLock().lock();
-            aclCache = aclCaches.get(resource);
-        } finally {
-            lock.readLock().unlock();
-        }
-        if (aclCache != null) {
-            for (scala.collection.Iterator<AclRole> iter = aclCache.iterator(); iter.hasNext();) {
-                acls.add(iter.next().getAcl());
+            while (resultSet.next()) {
+                //change the resource again, and create the acls
+                if (resource.name().equals(resultSet.getString("topic_name"))) {
+                    principal = KafkaPrincipal.fromString("User:" + resultSet.getString("project_name"));
+                    permission = kafka.security.auth.PermissionType$.MODULE$.fromString(resultSet.getString("permission_type"));
+                    host = resultSet.getString("host");
+                    operation = kafka.security.auth.Operation$.MODULE$.fromString(resultSet.getString("operation_type"));
+
+                    acl = new Acl(principal, permission, host, operation);
+                    aclSet.add(acl);
+                }
             }
-        } else {
+        } catch (SQLException ex) {
+            CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
+        }
+
+        if (aclSet.isEmpty()) {
             return new scala.collection.immutable.HashSet<>();
         }
-        return JavaConverters$.MODULE$.asScalaSetConverter(acls).asScala().toSet();
+
+        return JavaConverters$.MODULE$.asScalaSetConverter(aclSet).asScala().toSet();
     }
 
     @Override
     public Map<Resource, Set<Acl>> getAcls(KafkaPrincipal principal) {
 
-        java.util.Set<Acl> resourceAcl = new HashSet<>();
-        java.util.Map<Resource, Set<Acl>> principalAcls = new HashMap<>();
+        String topicName;
+        java.util.Map<Resource, java.util.Set<Acl>> allAcls = new java.util.HashMap<>();
+        java.util.Set<Acl> aclSet = new java.util.HashSet<>();
 
-        for (java.util.Map.Entry<Resource, Set<AclRole>> aclCache : aclCaches.entrySet()) {
-            Resource resource = aclCache.getKey();
-            Set<AclRole> aclsRole = aclCache.getValue().toSet();
+        PermissionType permission;
+        String host;
+        Operation operation;
 
-            for (scala.collection.Iterator<AclRole> iter = aclsRole.iterator(); iter.hasNext();) {
-                AclRole next = iter.next();
-                Acl acl = next.getAcl();
-                if (acl.principal().equals(principal)) {
-                    resourceAcl.add(acl);
+        try {
+            ResultSet resultSet = connObject.getPrinipalAcls(principal.getName());
+
+            while (resultSet.next()) {
+                //check the principal again and create the acls
+                if (principal.equals(KafkaPrincipal.fromString("User:" + resultSet.getString("project_name"))));
+                {
+                    topicName = resultSet.getString("topic_name");
+                    permission = kafka.security.auth.PermissionType$.MODULE$.fromString(resultSet.getString("permission_type"));
+                    host = resultSet.getString("host");
+                    operation = kafka.security.auth.Operation$.MODULE$.fromString(resultSet.getString("operation_type"));
+
+                    Acl TopicAcl = new Acl(principal, permission, host, operation);
+                    Resource resource = Resource.fromString("Topic:" + topicName);
+
+                    if (allAcls.keySet().contains(resource)) {
+                        allAcls.get(resource).add(TopicAcl);
+                    } else {
+                        aclSet.add(TopicAcl);
+                        allAcls.put(resource, aclSet);
+                    }
                 }
             }
+        } catch (SQLException ex) {
+            CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
+        }
 
-            Set<Acl> immutableAcl = JavaConverters$.MODULE$
-                    .asScalaSetConverter(resourceAcl).asScala().toSet();
+        //change the acl from java.util.Set to scala.collection.immutable.Set
+        java.util.Map<Resource, Set<Acl>> principalAcls = new HashMap<>();
+        for (java.util.Map.Entry<Resource, java.util.Set<Acl>> entry : allAcls.entrySet()) {
+            Resource resource = entry.getKey();
+            java.util.Set<Acl> value = entry.getValue();
+
+            Set<Acl> immutableAcl = JavaConverters$.MODULE$.asScalaSetConverter(value).asScala().toSet();
             principalAcls.put(resource, immutableAcl);
         }
 
-        scala.collection.immutable.Map<Resource, Set<Acl>> aclCache
+        //change the principalAcls from java.util.Map to scala.collection.immutable.Map
+        scala.collection.immutable.Map<Resource, Set<Acl>> immutablePrincipalAcls
                 = JavaConverters$.MODULE$.mapAsScalaMapConverter(principalAcls)
                 .asScala().toMap(scala.Predef$.MODULE$
                         .<scala.Tuple2<Resource, Set<Acl>>>conforms());
 
-        return aclCache;
+        return immutablePrincipalAcls;
     }
 
     @Override
@@ -318,7 +335,7 @@ public class KafkaAclAuthorizer implements Authorizer {
     }
 
     //load the acls from database into aclCache
-    private void loadCache() {
+    private void loadAllAcls() {
 
         String topicName;
         Set<AclRole> topicAcls;
