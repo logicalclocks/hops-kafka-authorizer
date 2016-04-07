@@ -15,7 +15,8 @@ public class ConnectionObject {
     private static Connection conn = null;
     PreparedStatement prepStatements;
 
-    static final Logger CONNECTIONLOGGGER = Logger.getLogger(ConnectionObject.class.getName());
+    static final Logger CONNECTIONLOGGGER
+            = Logger.getLogger(ConnectionObject.class.getName());
 
     //Sql preparedStatements
     final String getAllAclsQuery = "SELECT * from topic_acls";
@@ -24,10 +25,9 @@ public class ConnectionObject {
     final String getPrincipalAcls = "SELECT * from topic_acls where project_name =?";
     final String getProjectId = "SELECT * from project_topics where topic_name =?";
     final String getProjectName = "SELECT *  from project where id =?";
-    final String getProjectTeams = "SELECT * projectname from project_team";
+    final String getProjectTeams = "SELECT * from project_team";
     final String getProjects = "SELECT id, projectname from project";
-    final String getUsers ="SELECT username, email from users";
-    
+    final String getUsers = "SELECT username, email from users";
 
     final String insertTopicAcl = "INSERT into topic_acls values()";
     final String insertAcl = "INSERT into topic_acls (topic_name, project_name, "
@@ -37,10 +37,10 @@ public class ConnectionObject {
             + " AND project_name =? AND role=? AND operation_type=? AND"
             + " permission_type=? AND host=?";
     final String deleteAllTopicAcls = "DELETE from topic_acls where topic_name =?";
-    
-    
 
     public ConnectionObject(String dbType) {
+
+        //load the properties file ndb.props and read the values, print a log incase error
         try {
             if (dbType.equalsIgnoreCase("mysql")) {
                 Class.forName("com.mysql.jdbc.Driver");
@@ -56,12 +56,12 @@ public class ConnectionObject {
     public void addTopicAcls(String topicName, Set<Acl> acls) {
 
 
-        /*Load tables user, project and project_team, to access the role of the user 
-        Each acl has a KafkaPrincipal from which we can the project name and the 
-        user name. Get the project id for this project name and the user email for this
-        user name. Using the project id and the user name, get the role of the member
-        in the project.
-        Keeping a cache of 3 tables locally avoids many database read operations.  
+        /*Load tables user, project and project_team, to access the role of 
+        the user. Each acl has a KafkaPrincipal from which we can the project
+        name and the user name. Get the project id for this project name and the
+        user email for this user name. Using the project id and the user name, 
+        get the role of the member in the project.Keeping a cache of 3 tables 
+        locally avoids many database read operations.  
          */
         Map<String, String> users = new HashMap<>();
         Map<String, String> projects = new HashMap<>();
@@ -98,7 +98,7 @@ public class ConnectionObject {
             CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
         }
 
-        //add the acls to the database here, lookup in the tables above for user role
+        //add the acls to the database, lookup in the tables above for user role
         String projectName = getProjectName(topicName);
         String projectName__userName;
         String projectId, teamMemberEmail;
@@ -167,7 +167,7 @@ public class ConnectionObject {
         }
         return result;
     }
-    
+
     public Boolean topicExists(String topicName) {
 
         Boolean topicExists = false;
@@ -241,6 +241,64 @@ public class ConnectionObject {
             CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
         }
         return projectName;
+    }
+
+    public boolean isTopicBelongsToProject(String projectName, String topicName) {
+
+        String projectId = null;
+
+        try {
+
+            prepStatements = conn.prepareStatement("SELECT id from project where projectname=?");
+            prepStatements.setString(1, projectName);
+            ResultSet resultSet = prepStatements.executeQuery();
+            while (resultSet.next()) {
+                projectId = resultSet.getString("id");
+            }
+
+            prepStatements = conn.prepareCall("SELECT * from project_topics where topic_name=? AND project_id=?");
+            prepStatements.setString(1, topicName);
+            prepStatements.setString(2, projectId);
+
+            resultSet = prepStatements.executeQuery();
+            if (resultSet.next() == false) {
+                return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public String getPrinciplaRole(String projectName__userName) {
+
+        String role = null;
+
+        String projectName = projectName__userName.split("__", 2)[0];
+        String userName = projectName__userName.split("__", 2)[1];
+
+        String projectId;
+        String email;
+
+        try {
+            prepStatements = conn.prepareCall("SELECT from project where projectname=?");
+            ResultSet resutlSet = prepStatements.executeQuery();
+            while (resutlSet.next()) {
+                projectId = resutlSet.getString("id");
+
+            }
+            prepStatements = conn.prepareCall("SELECT from user where username=?");
+            resutlSet = prepStatements.executeQuery();
+            while (resutlSet.next()) {
+                email = resutlSet.getString("username");
+
+            }
+
+        } catch (Exception e) {
+        }
+
+        return role;
     }
 
     public void closeConnection() {

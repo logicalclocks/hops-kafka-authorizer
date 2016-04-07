@@ -30,16 +30,18 @@ import kafka.security.auth.PermissionType;
  *
  * @author misdess
  */
-public class KafkaAclAuthorizer implements Authorizer {
+public class HopsAclAuthorizer implements Authorizer {
 
     private static Logger authorizerLoger = Logger.getLogger("kafka.authorizer.logger");
 
-    //List of users that will be treated as super users and will have access to all the resources for all actions from all hosts, defaults to no super users.
+    //List of users that will be treated as super users and will have access to 
+    //all the resources for all actions from all hosts, defaults to no super users.
     private java.util.Set<KafkaPrincipal> superUsers = new java.util.HashSet<>();
 
     private static String superUserProp = "super.users";
 
-    //If set to true when no acls are found for a resource , authorizer allows access to everyone. Defaults to false.
+    //If set to true when no acls are found for a resource , authorizer allows 
+    //access to everyone. Defaults to false.
     private boolean shouldAllowEveryoneIfNoAclIsFound = false;
 
     private static String AllowEveryoneIfNoAclIsFoundProp = "allow.everyone.if.no.acl.found";
@@ -70,7 +72,8 @@ public class KafkaAclAuthorizer implements Authorizer {
             superUsers = new HashSet<>();
         }
 
-        shouldAllowEveryoneIfNoAclIsFound = Boolean.parseBoolean(configs.get(this.AllowEveryoneIfNoAclIsFoundProp).toString());
+        shouldAllowEveryoneIfNoAclIsFound = Boolean.parseBoolean(
+                configs.get(this.AllowEveryoneIfNoAclIsFoundProp).toString());
 
         //initialize database connection. Can the type of database be passed in the configuration?
         connObject = new ConnectionObject("mysql");
@@ -82,48 +85,59 @@ public class KafkaAclAuthorizer implements Authorizer {
 
         KafkaPrincipal principal = session.principal();
         String host = session.clientAddress().getHostAddress();
+        
+        //get role of the principal on this project from database
+        String projectName__userName = principal.getName();
+//        String role = connObject.getPrinciplaRole(projectName__userName);
+//         
+//        if(role==null)
+//        return false;
          
-        //load the acls from database into cache
-        loadAllAcls();
+        //load the acls from database into a local cache
+//        loadAllAcls();
+
+        String topicName = resource.name();
         
-        //get acls for this resource type
-        java.util.Set<Acl> resourceAcls = JavaConverters$.MODULE$.setAsJavaSetConverter(getAcls(resource)).asJava();
-        
-        //get acls for wildcard resources
-        java.util.Set<Acl> wildCardResourceAcls = JavaConverters$.MODULE$
-                .setAsJavaSetConverter(getAcls(
-                        new Resource(resource.resourceType(), Resource.WildCardResource()))).asJava();
-
-        //collect all acls for both this resources and wildcard resources
-        resourceAcls.addAll(wildCardResourceAcls);
-        
-        //check if there is any Deny acl match that would disallow this operation.
-        Boolean denyMatch = aclMatch(session, operation, resource, principal, host, kafka.security.auth.Deny$.MODULE$, resourceAcls);
-
-        //if principal is allowed to read or write we allow describe by default, the reverse does not apply to Deny.
-        java.util.Set<Operation> ops = new HashSet<>();
-        ops.add(operation);
-
-        if (kafka.security.auth.Describe$.MODULE$ == operation) {
-            ops.add(kafka.security.auth.Write$.MODULE$);
-            ops.add(kafka.security.auth.Read$.MODULE$);
-        }
-
-        //now check if there is any allow acl that will allow this operation.
-        Boolean allowMatch = false;
-        for (Operation op : ops) {
-            if (aclMatch(session, op, resource, principal, host, kafka.security.auth.Allow$.MODULE$, resourceAcls)) {
-                allowMatch = true;
-            }
-        }
-
-        //we allow an operation if a user is a super user or if no acls are found and user has configured to allow all users
-        //when no acls are found or if no deny acls are found and at least one allow acls matches.
-        Boolean authorized = isSuperUser(principal)
-                || isEmptyAclAndAuthorized(operation, resource, principal, host, resourceAcls)
-                || (!denyMatch && allowMatch);
-
-        logAuditMessage(principal, authorized, operation, resource, host);
+        boolean authorized = connObject.isTopicBelongsToProject(projectName__userName.split("__")[0], topicName);
+//        
+//        //get acls for this resource type
+//        java.util.Set<Acl> resourceAcls = JavaConverters$.MODULE$.setAsJavaSetConverter(getAcls(resource)).asJava();
+//        
+//        //get acls for wildcard resources
+//        java.util.Set<Acl> wildCardResourceAcls = JavaConverters$.MODULE$
+//                .setAsJavaSetConverter(getAcls(
+//                        new Resource(resource.resourceType(), Resource.WildCardResource()))).asJava();
+//
+//        //collect all acls for both this resources and wildcard resources
+//        resourceAcls.addAll(wildCardResourceAcls);
+//        
+//        //check if there is any Deny acl match that would disallow this operation.
+//        Boolean denyMatch = aclMatch(session, operation, resource, principal, host, kafka.security.auth.Deny$.MODULE$, resourceAcls);
+//
+//        //if principal is allowed to read or write we allow describe by default, the reverse does not apply to Deny.
+//        java.util.Set<Operation> ops = new HashSet<>();
+//        ops.add(operation);
+//
+//        if (kafka.security.auth.Describe$.MODULE$ == operation) {
+//            ops.add(kafka.security.auth.Write$.MODULE$);
+//            ops.add(kafka.security.auth.Read$.MODULE$);
+//        }
+//
+//        //now check if there is any allow acl that will allow this operation.
+//        Boolean allowMatch = false;
+//        for (Operation op : ops) {
+//            if (aclMatch(session, op, resource, principal, host, kafka.security.auth.Allow$.MODULE$, resourceAcls)) {
+//                allowMatch = true;
+//            }
+//        }
+//
+//        //we allow an operation if a user is a super user or if no acls are found and user has configured to allow all users
+//        //when no acls are found or if no deny acls are found and at least one allow acls matches.
+//        Boolean authorized = isSuperUser(principal)
+//                || isEmptyAclAndAuthorized(operation, resource, principal, host, resourceAcls)
+//                || (!denyMatch && allowMatch);
+//
+//        logAuditMessage(principal, authorized, operation, resource, host);
 
         return authorized;
     }
@@ -181,7 +195,7 @@ public class KafkaAclAuthorizer implements Authorizer {
         }
 
         authorizerLoger.log(Level.INFO,
-                "Perincipal = {0} is {1} Operation = {2} from host =  {3} on resource = {4}",
+                "Perincipal = {0} is {1} Operation = {2} from host =  {3} on resource = {String topicName4}",
                 new Object[]{principal, permissionType, operation, host, resource});
     }
 

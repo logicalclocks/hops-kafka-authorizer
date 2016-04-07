@@ -25,7 +25,7 @@ import org.apache.kafka.common.security.auth.PrincipalBuilder;
  *
  * @author misdess
  */
-public class KafkaPrincipalBuilder implements PrincipalBuilder {
+public class HopsPrincipalBuilder implements PrincipalBuilder {
 
     @Override
     public void configure(Map<String, ?> configs) {
@@ -39,15 +39,17 @@ public class KafkaPrincipalBuilder implements PrincipalBuilder {
     *In our case it will be,  principalType:projectName__userName.
      */
     @Override
-    public Principal buildPrincipal(TransportLayer transportLayer, Authenticator authenticator) throws KafkaException {
+    public Principal buildPrincipal(TransportLayer transportLayer,
+            Authenticator authenticator) throws KafkaException {
         try {
 
             Principal principal = transportLayer.peerPrincipal();
-            String[] TLSUserName = principal.getName().split(",", 6);
-            String projetcName__userName = TLSUserName[0].split("=", 2)[1];
-            String userType = principal.toString().split(":", 2)[0];
+            String[] TLSUserName = principal.getName().split(",");
+            String projetcName__userName = TLSUserName[0].split("=")[1];
+            String userType = principal.toString().split(":")[0];
 
-            KafkaPrincipal userPrincipal = new KafkaPrincipal(userType, projetcName__userName);
+            KafkaPrincipal userPrincipal = new KafkaPrincipal(userType, 
+                    projetcName__userName);
             return userPrincipal;
         } catch (Exception e) {
             throw new KafkaException("Failed to build Kafka principal due to: ", e);
