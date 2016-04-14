@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package hops.io.kafka;
+package io.hops.kafka;
 
 import kafka.security.auth.Acl; 
 

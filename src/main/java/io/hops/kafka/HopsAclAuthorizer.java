@@ -3,14 +3,16 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package hops.io.kafka;
+package io.hops.kafka;
 
-import static hops.io.kafka.ConnectionObject.CONNECTIONLOGGGER;
+import static io.hops.kafka.ConnectionObject.CONNECTIONLOGGGER;
+import java.io.IOException;
 import kafka.network.RequestChannel;
 import kafka.security.auth.Acl;
 import kafka.security.auth.Authorizer;
 import kafka.security.auth.Operation;
 import kafka.security.auth.Resource;
+import kafka.security.auth.PermissionType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import scala.collection.immutable.Map;
 import scala.collection.immutable.Set;
@@ -24,7 +26,10 @@ import java.util.HashSet;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import kafka.security.auth.PermissionType;
+import java.util.logging.Handler;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.FileHandler;
+
 
 /**
  *
@@ -32,23 +37,29 @@ import kafka.security.auth.PermissionType;
  */
 public class HopsAclAuthorizer implements Authorizer {
 
-    private static Logger authorizerLoger = Logger.getLogger("kafka.authorizer.logger");
-
+    private static Logger authorizerLogger = new LoggerProperties(HopsAclAuthorizer.class.getName()).getLogger();
+    
+    private static Handler consoleHandler;
     //List of users that will be treated as super users and will have access to 
     //all the resources for all actions from all hosts, defaults to no super users.
     private java.util.Set<KafkaPrincipal> superUsers = new java.util.HashSet<>();
 
-    private static String superUserProp = "super.users";
+    private static final String superUserProp = "super.users";
 
     //If set to true when no acls are found for a resource , authorizer allows 
     //access to everyone. Defaults to false.
     private boolean shouldAllowEveryoneIfNoAclIsFound = false;
 
-    private static String AllowEveryoneIfNoAclIsFoundProp = "allow.everyone.if.no.acl.found";
+    private static final String AllowEveryoneIfNoAclIsFoundProp = "allow.everyone.if.no.acl.found";
     
     ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     private java.util.Map<Resource, Set<AclRole>> aclCaches = new java.util.HashMap<>();
+    
+    private final String databaseTypeProp ="database.type";
+    private final String databaseUrlProp = "database.url";
+    private final String databaseUserNameProp = "database.username";
+    private final String databasePasswordProp = "database.password";
 
     ConnectionObject connObject;
     
@@ -59,7 +70,11 @@ public class HopsAclAuthorizer implements Authorizer {
     @Override
     public void configure(java.util.Map<String, ?> configs) {
 
-        Object obj = configs.get(this.superUserProp);
+        Object obj = configs.get(HopsAclAuthorizer.superUserProp);
+        String databaseType;
+        String databaseUrl;
+        String databaseUserName;
+        String databasePassword;
 
         if (obj != null) {
             String superUsersStr = (String) obj;
@@ -71,13 +86,24 @@ public class HopsAclAuthorizer implements Authorizer {
         } else {
             superUsers = new HashSet<>();
         }
+        
+        databaseType= configs.get(databaseTypeProp).toString();
+        databaseUrl = configs.get(databaseUrlProp).toString();
+        databaseUserName=configs.get(databaseUserNameProp).toString();
+        databasePassword= configs.get(databasePasswordProp).toString();       
 
-        shouldAllowEveryoneIfNoAclIsFound = Boolean.parseBoolean(
-                configs.get(this.AllowEveryoneIfNoAclIsFoundProp).toString());
-
+//        shouldAllowEveryoneIfNoAclIsFound = Boolean.valueOf(
+//                configs.get(HopsAclAuthorizer.AllowEveryoneIfNoAclIsFoundProp).toString());
         //initialize database connection. Can the type of database be passed in the configuration?
-        connObject = new ConnectionObject("mysql");
+       connObject = new ConnectionObject(databaseType, databaseUrl, databaseUserName, databasePassword);
        
+//        try {
+//            authorizerLogger.addHandler(new FileHandler("/var/log/kafka/acl_authorizser.log"));
+//        } catch (IOException  ex) {
+//            Logger.getLogger(HopsAclAuthorizer.class.getName()).log(Level.SEVERE, null, ex);
+//        } catch (SecurityException ex) {
+//            Logger.getLogger(HopsAclAuthorizer.class.getName()).log(Level.SEVERE, null, ex);
+//        }
     }
 
     @Override
@@ -85,20 +111,25 @@ public class HopsAclAuthorizer implements Authorizer {
 
         KafkaPrincipal principal = session.principal();
         String host = session.clientAddress().getHostAddress();
-        
+
         //get role of the principal on this project from database
         String projectName__userName = principal.getName();
-//        String role = connObject.getPrinciplaRole(projectName__userName);
+
+        if (projectName__userName.equalsIgnoreCase("ANONYMOUS")) {
+            authorizerLogger.log(Level.SEVERE, "No Acl found for cluster authorization, user: {0}", new Object[]{projectName__userName});
+            return true;
+        }
+
+        String topicName = resource.name();
+
+        boolean authorized = connObject.isTopicBelongsToProject(projectName__userName.split("__")[0], topicName);
+
+        //        String role = connObject.getPrinciplaRole(projectName__userName);
 //         
 //        if(role==null)
 //        return false;
-         
         //load the acls from database into a local cache
 //        loadAllAcls();
-
-        String topicName = resource.name();
-        
-        boolean authorized = connObject.isTopicBelongsToProject(projectName__userName.split("__")[0], topicName);
 //        
 //        //get acls for this resource type
 //        java.util.Set<Acl> resourceAcls = JavaConverters$.MODULE$.setAsJavaSetConverter(getAcls(resource)).asJava();
@@ -139,6 +170,7 @@ public class HopsAclAuthorizer implements Authorizer {
 //
 //        logAuditMessage(principal, authorized, operation, resource, host);
 
+        authorizerLogger.log(Level.INFO, "No Acl found for cluster authorization: authorization 2 ");
         return authorized;
     }
 
@@ -153,7 +185,7 @@ public class HopsAclAuthorizer implements Authorizer {
                     && (principal == acl.principal() || acl.principal() == Acl.WildCardPrincipal())
                     && (operations == acl.operation() || acl.operation() == kafka.security.auth.All$.MODULE$)
                     && (host.equalsIgnoreCase(acl.host()) || acl.host().equalsIgnoreCase(Acl.WildCardHost()))) {
-                authorizerLoger.log(Level.WARNING, "operation = {0}"
+                authorizerLogger.log(Level.WARNING, "operation = {0}"
                         + " on resource ={1} from host ={2} is {3} based on acl = {4}",
                         new Object[]{operations, resource, host, permissionType, acl});
                 return true;
@@ -166,7 +198,7 @@ public class HopsAclAuthorizer implements Authorizer {
             KafkaPrincipal principal, String host, java.util.Set<Acl> acls) {
         
         if (acls.isEmpty()) {
-            authorizerLoger.log(Level.INFO, "No acl found for resource {0}, authorized = {1}",
+            authorizerLogger.log(Level.INFO, "No acl found for resource {0}, authorized = {1}",
                     new Object[]{resource, shouldAllowEveryoneIfNoAclIsFound});
             return shouldAllowEveryoneIfNoAclIsFound;
         }
@@ -176,7 +208,7 @@ public class HopsAclAuthorizer implements Authorizer {
     Boolean isSuperUser(KafkaPrincipal principal) {
         
         if (superUsers.contains(principal)) {
-            authorizerLoger.log(Level.INFO,
+            authorizerLogger.log(Level.INFO,
                     "principal = {0} is a super user, allowing operation without checking acls.",
                     new Object[]{principal});
             return true;
@@ -194,7 +226,7 @@ public class HopsAclAuthorizer implements Authorizer {
             permissionType = kafka.security.auth.Deny$.MODULE$;
         }
 
-        authorizerLoger.log(Level.INFO,
+        authorizerLogger.log(Level.INFO,
                 "Perincipal = {0} is {1} Operation = {2} from host =  {3} on resource = {String topicName4}",
                 new Object[]{principal, permissionType, operation, host, resource});
     }
@@ -203,26 +235,33 @@ public class HopsAclAuthorizer implements Authorizer {
     public void addAcls(Set<Acl> acls, Resource resource) {
 
         if (acls != null && !acls.isEmpty()) {
-            java.util.Set<Acl> updatedAcls = JavaConverters$.MODULE$
+            java.util.Set<Acl> newAcls = JavaConverters$.MODULE$
                     .setAsJavaSetConverter(acls).asJava();
 
             //add the topic acls to the database
-            connObject.addTopicAcls(resource.name(), updatedAcls);
+            connObject.addTopicAcls(resource.name(), newAcls);
         }
     }
 
     @Override
     public boolean removeAcls(Set<Acl> aclsToBeRemoved, Resource resource) {
-
-        return connObject.removeAcls(resource.name(), JavaConverters$.MODULE$
+        
+        java.util.Set<Acl> removeAcls = new java.util.HashSet<>();
+        if (aclsToBeRemoved != null && !aclsToBeRemoved.isEmpty()) {
+            removeAcls = JavaConverters$.MODULE$
+                    .setAsJavaSetConverter(aclsToBeRemoved).asJava();
+        }
+        if (removeAcls.isEmpty()) {
+            return false;
+        }
+        return connObject.removeTopicAcls(resource.name(), JavaConverters$.MODULE$
                 .setAsJavaSetConverter(aclsToBeRemoved).asJava());
     }
 
     @Override
     public boolean removeAcls(Resource resource) {
-        
-        Boolean topicExists = connObject.removeTopic(resource.name());
-        return topicExists;
+
+        return connObject.removeAllTopicAcls(resource.name());
     }
 
     @Override
@@ -344,7 +383,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
     @Override
     public void close() {
-        connObject.closeConnection();
+      
         connObject = null;
     }
 

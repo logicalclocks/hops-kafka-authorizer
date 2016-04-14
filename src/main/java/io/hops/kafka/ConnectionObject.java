@@ -1,4 +1,4 @@
-package hops.io.kafka;
+package io.hops.kafka;
 
 import java.sql.*;
 import java.util.*;
@@ -16,8 +16,7 @@ public class ConnectionObject {
     PreparedStatement prepStatements;
 
     static final Logger CONNECTIONLOGGGER
-            = Logger.getLogger(ConnectionObject.class.getName());
-
+            = new LoggerProperties(ConnectionObject.class.getName()).getLogger();
     //Sql preparedStatements
     final String getAllAclsQuery = "SELECT * from topic_acls";
     final String getTopicAclQuery = "SELECT * from topic_acls where topic_name =?";
@@ -38,19 +37,20 @@ public class ConnectionObject {
             + " permission_type=? AND host=?";
     final String deleteAllTopicAcls = "DELETE from topic_acls where topic_name =?";
 
-    public ConnectionObject(String dbType) {
+    public ConnectionObject(String dbType, String dbUrl, String dbUserName, String dbPassword) {
 
-        //load the properties file ndb.props and read the values, print a log incase error
+        CONNECTIONLOGGGER.log(Level.SEVERE, "testing database connection to: {0}", new Object[]{dbUrl});
+
         try {
             if (dbType.equalsIgnoreCase("mysql")) {
                 Class.forName("com.mysql.jdbc.Driver");
-                conn
-                        = DriverManager.getConnection("database url");
+                conn = DriverManager.getConnection("jdbc:mysql://" + dbUrl, dbUserName, dbPassword);
+                CONNECTIONLOGGGER.log(Level.SEVERE, "connection made successfully to: {0}", new Object[]{dbUrl});
             }
+
         } catch (SQLException | ClassNotFoundException ex) {
             CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
         }
-
     }
 
     public void addTopicAcls(String topicName, Set<Acl> acls) {
@@ -183,7 +183,7 @@ public class ConnectionObject {
         return topicExists;
     }
 
-    public Boolean removeTopic(String topicName) {
+    public Boolean removeAllTopicAcls(String topicName) {
 
         Boolean aclRemoved = false;
         try {
@@ -196,7 +196,7 @@ public class ConnectionObject {
         return aclRemoved;
     }
 
-    public Boolean removeAcls(String topicName, Set<Acl> acls) {
+    public Boolean removeTopicAcls(String topicName, Set<Acl> acls) {
 
         Boolean alcsRemoved = false;
         String projectName = getProjectName(topicName);
@@ -273,11 +273,10 @@ public class ConnectionObject {
 
     public String getPrinciplaRole(String projectName__userName) {
 
-        String role = null;
-
         String projectName = projectName__userName.split("__", 2)[0];
         String userName = projectName__userName.split("__", 2)[1];
 
+        String role = null;
         String projectId;
         String email;
 
@@ -286,26 +285,14 @@ public class ConnectionObject {
             ResultSet resutlSet = prepStatements.executeQuery();
             while (resutlSet.next()) {
                 projectId = resutlSet.getString("id");
-
             }
             prepStatements = conn.prepareCall("SELECT from user where username=?");
             resutlSet = prepStatements.executeQuery();
             while (resutlSet.next()) {
                 email = resutlSet.getString("username");
-
             }
-
         } catch (Exception e) {
         }
-
         return role;
-    }
-
-    public void closeConnection() {
-        try {
-            conn.close();
-        } catch (SQLException ex) {
-            CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
-        }
     }
 }

@@ -10,7 +10,7 @@
  * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
  * specific language governing permissions and limitations under the License.
  */
-package hops.io.kafka;
+package io.hops.kafka;
 
 import java.util.Map;
 import java.security.Principal;
@@ -42,15 +42,22 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
     public Principal buildPrincipal(TransportLayer transportLayer,
             Authenticator authenticator) throws KafkaException {
         try {
-
             Principal principal = transportLayer.peerPrincipal();
-            String[] TLSUserName = principal.getName().split(",");
-            String projetcName__userName = TLSUserName[0].split("=")[1];
-            String userType = principal.toString().split(":")[0];
 
-            KafkaPrincipal userPrincipal = new KafkaPrincipal(userType, 
-                    projetcName__userName);
-            return userPrincipal;
+            if (!(principal instanceof KafkaPrincipal)) {
+                return principal;
+            }
+
+            String TLSUserName = principal.getName();
+            if (TLSUserName.equalsIgnoreCase("ANONYMOUS")) {
+                return principal;
+            }
+
+            String userType = principal.toString().split(":")[0];
+            String projetcName__userName = TLSUserName.split(",", 6)[0].split("=",2)[1];
+
+            Principal kafkaPrincipal = new KafkaPrincipal(userType, projetcName__userName);
+            return kafkaPrincipal;
         } catch (Exception e) {
             throw new KafkaException("Failed to build Kafka principal due to: ", e);
         }
