@@ -238,7 +238,7 @@ public class HopsAclAuthorizer implements Authorizer {
             java.util.Set<Acl> newAcls = JavaConverters$.MODULE$
                     .setAsJavaSetConverter(acls).asJava();
 
-            //add the topic acls to the database
+            //add topic acls to the database
             connObject.addTopicAcls(resource.name(), newAcls);
         }
     }
@@ -280,10 +280,10 @@ public class HopsAclAuthorizer implements Authorizer {
             while (resultSet.next()) {
                 //change the resource again, and create the acls
                 if (resource.name().equals(resultSet.getString("topic_name"))) {
-                    principal = KafkaPrincipal.fromString("User:" + resultSet.getString("project_name"));
+                    principal = KafkaPrincipal.fromString("User:" + resultSet.getString("user_id"));
                     permission = kafka.security.auth.PermissionType$.MODULE$.fromString(resultSet.getString("permission_type"));
-                    host = resultSet.getString("host");
                     operation = kafka.security.auth.Operation$.MODULE$.fromString(resultSet.getString("operation_type"));
+                    host = resultSet.getString("host");
 
                     acl = new Acl(principal, permission, host, operation);
                     aclSet.add(acl);
@@ -316,7 +316,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
             while (resultSet.next()) {
                 //check the principal again and create the acls
-                if (principal.equals(KafkaPrincipal.fromString("User:" + resultSet.getString("project_name"))));
+                if (principal.equals(KafkaPrincipal.fromString("User:" + resultSet.getString("user_id"))));
                 {
                     topicName = resultSet.getString("topic_name");
                     permission = kafka.security.auth.PermissionType$.MODULE$.fromString(resultSet.getString("permission_type"));
@@ -408,7 +408,7 @@ public class HopsAclAuthorizer implements Authorizer {
             while (resultSet.next()) {
                 
                 topicName = resultSet.getString("topic_name");
-                principal = KafkaPrincipal.fromString("User:" + resultSet.getString("project_name"));
+                principal = KafkaPrincipal.fromString("User:" + resultSet.getString("user_id"));
                 permission = kafka.security.auth.PermissionType$.MODULE$.fromString(resultSet.getString("permission_type"));
                 host = resultSet.getString("host");
                 operation = kafka.security.auth.Operation$.MODULE$.fromString(resultSet.getString("operation_type"));

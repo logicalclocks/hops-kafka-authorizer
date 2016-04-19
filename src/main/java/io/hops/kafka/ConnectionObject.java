@@ -12,7 +12,7 @@ import kafka.security.auth.Acl;
  */
 public class ConnectionObject {
 
-    private static Connection conn = null;
+    private  Connection conn;
     PreparedStatement prepStatements;
 
     static final Logger CONNECTIONLOGGGER
@@ -28,24 +28,22 @@ public class ConnectionObject {
     final String getProjects = "SELECT id, projectname from project";
     final String getUsers = "SELECT username, email from users";
 
-    final String insertTopicAcl = "INSERT into topic_acls values()";
-    final String insertAcl = "INSERT into topic_acls (topic_name, project_name, "
-            + "role, operation_type, permission_type, host) values(?, ?, ?, ?, ?, ?)";
+    final String insertTopicAcl = "INSERT into topic_acls values(?, ?, ?, ?, ?, ?)";
 
     final String deleteTopicAcls = "DELETE from topic_acls where topic_name =?"
-            + " AND project_name =? AND role=? AND operation_type=? AND"
-            + " permission_type=? AND host=?";
+            + " AND user_id =? AND permission_type=? AND operation_type=? AND"
+            + "  host=? AND role=?";
     final String deleteAllTopicAcls = "DELETE from topic_acls where topic_name =?";
 
     public ConnectionObject(String dbType, String dbUrl, String dbUserName, String dbPassword) {
 
-        CONNECTIONLOGGGER.log(Level.SEVERE, "testing database connection to: {0}", new Object[]{dbUrl});
-
+        CONNECTIONLOGGGER.log(Level.INFO, "testing database connection to: {0}", new Object[]{dbUrl});
+          //  bbc1.sics.se/hopsworks
         try {
             if (dbType.equalsIgnoreCase("mysql")) {
                 Class.forName("com.mysql.jdbc.Driver");
-                conn = DriverManager.getConnection("jdbc:mysql://" + dbUrl, dbUserName, dbPassword);
-                CONNECTIONLOGGGER.log(Level.SEVERE, "connection made successfully to: {0}", new Object[]{dbUrl});
+                conn = DriverManager.getConnection("jdbc:mysql://"+dbUrl, dbUserName, dbPassword);
+                CONNECTIONLOGGGER.log(Level.INFO, "connection made successfully to: {0}", new Object[]{dbUrl});
             }
 
         } catch (SQLException | ClassNotFoundException ex) {
@@ -57,10 +55,10 @@ public class ConnectionObject {
 
 
         /*Load tables user, project and project_team, to access the role of 
-        the user. Each acl has a KafkaPrincipal from which we can the project
+        the user. Each acl has a KafkaPrincipal from which we can get the project
         name and the user name. Get the project id for this project name and the
         user email for this user name. Using the project id and the user name, 
-        get the role of the member in the project.Keeping a cache of 3 tables 
+        get the role of the member in the project. Keeping a cache of 3 tables 
         locally avoids many database read operations.  
          */
         Map<String, String> users = new HashMap<>();
@@ -99,7 +97,7 @@ public class ConnectionObject {
         }
 
         //add the acls to the database, lookup in the tables above for user role
-        String projectName = getProjectName(topicName);
+        //String projectName = getProjectName(topicName);
         String projectName__userName;
         String projectId, teamMemberEmail;
         String role;
@@ -108,18 +106,17 @@ public class ConnectionObject {
             prepStatements = conn.prepareStatement(insertTopicAcl);
             for (Acl acl : acls) {
                 projectName__userName = acl.principal().getName();
-                projectId = projects.get(projectName__userName.split("__", 2)[0]);
-                teamMemberEmail = users.get(projectName__userName.split("__", 2)[1]);
+                projectId = projects.get(projectName__userName.split("__")[0]);
+                teamMemberEmail = users.get(projectName__userName.split("__")[1]);
                 role = projectTeams.get(projectId + "__" + teamMemberEmail);
 
                 prepStatements.setString(1, topicName);
-                prepStatements.setString(2, projectName);
-
-                prepStatements.setString(3, role);
-
+                prepStatements.setString(2, projectName__userName);
+                prepStatements.setString(3, acl.permissionType().name());
                 prepStatements.setString(4, acl.operation().name());
-                prepStatements.setString(5, acl.permissionType().name());
-                prepStatements.setString(6, acl.host());
+                prepStatements.setString(5, acl.host());
+                prepStatements.setString(6, role);
+                
                 prepStatements.execute();
             }
         } catch (SQLException ex) {
@@ -197,6 +194,8 @@ public class ConnectionObject {
     }
 
     public Boolean removeTopicAcls(String topicName, Set<Acl> acls) {
+        
+        //get user role from project_team table
 
         Boolean alcsRemoved = false;
         String projectName = getProjectName(topicName);
@@ -205,11 +204,12 @@ public class ConnectionObject {
             prepStatements = conn.prepareStatement(deleteTopicAcls);
             for (Acl acl : acls) {
                 prepStatements.setString(1, topicName);
-                prepStatements.setString(2, projectName);
-                prepStatements.setString(3, "data owner");
+                prepStatements.setString(2, acl.principal().getName());
+                prepStatements.setString(3, acl.permissionType().name());
                 prepStatements.setString(4, acl.operation().name());
-                prepStatements.setString(5, acl.permissionType().name());
-                prepStatements.setString(6, acl.host());
+                prepStatements.setString(5, acl.host());
+                prepStatements.setString(6, "data owner");
+
                 alcsRemoved = prepStatements.execute();
             }
         } catch (SQLException ex) {
@@ -222,15 +222,16 @@ public class ConnectionObject {
 
         String projectId = null;
         String projectName = null;
+        ResultSet resultSet = null;
         try {
 
             prepStatements = conn.prepareStatement(getProjectId);
             prepStatements.setString(1, topicName);
-            ResultSet resultSet = prepStatements.executeQuery();
+            resultSet = prepStatements.executeQuery();
             while (resultSet.next()) {
-                projectId = resultSet.getString("id");
+                projectId = resultSet.getString("project_id");
             }
-
+            
             prepStatements = conn.prepareStatement(getProjectName);
             prepStatements.setString(1, projectId);
             resultSet = prepStatements.executeQuery();
