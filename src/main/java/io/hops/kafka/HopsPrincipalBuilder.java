@@ -54,7 +54,7 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
             }
 
             String userType = principal.toString().split(":")[0];
-            String projetcName__userName = TLSUserName.split(",", 6)[0].split("=",2)[1];
+            String projetcName__userName = TLSUserName.split(",", 6)[0].split("=")[1];
 
             Principal kafkaPrincipal = new KafkaPrincipal(userType, projetcName__userName);
             return kafkaPrincipal;

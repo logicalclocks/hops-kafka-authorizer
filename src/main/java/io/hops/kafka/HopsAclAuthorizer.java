@@ -5,8 +5,7 @@
  */
 package io.hops.kafka;
 
-import static io.hops.kafka.ConnectionObject.CONNECTIONLOGGGER;
-import java.io.IOException;
+import static io.hops.kafka.DbConnection.CONNECTIONLOGGGER;
 import kafka.network.RequestChannel;
 import kafka.security.auth.Acl;
 import kafka.security.auth.Authorizer;
@@ -27,9 +26,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.logging.Handler;
-import java.util.logging.ConsoleHandler;
-import java.util.logging.FileHandler;
-
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -39,7 +36,6 @@ public class HopsAclAuthorizer implements Authorizer {
 
     private static Logger authorizerLogger = new LoggerProperties(HopsAclAuthorizer.class.getName()).getLogger();
     
-    private static Handler consoleHandler;
     //List of users that will be treated as super users and will have access to 
     //all the resources for all actions from all hosts, defaults to no super users.
     private java.util.Set<KafkaPrincipal> superUsers = new java.util.HashSet<>();
@@ -61,7 +57,7 @@ public class HopsAclAuthorizer implements Authorizer {
     private final String databaseUserNameProp = "database.username";
     private final String databasePasswordProp = "database.password";
 
-    ConnectionObject connObject;
+    DbConnection connObject;
     
     /**
      * Guaranteed to be called before any authorize call is made.
@@ -95,7 +91,7 @@ public class HopsAclAuthorizer implements Authorizer {
 //        shouldAllowEveryoneIfNoAclIsFound = Boolean.valueOf(
 //                configs.get(HopsAclAuthorizer.AllowEveryoneIfNoAclIsFoundProp).toString());
         //initialize database connection. Can the type of database be passed in the configuration?
-       connObject = new ConnectionObject(databaseType, databaseUrl, databaseUserName, databasePassword);
+       connObject = new DbConnection(databaseType, databaseUrl, databaseUserName, databasePassword);
        
 //        try {
 //            authorizerLogger.addHandler(new FileHandler("/var/log/kafka/acl_authorizser.log"));
@@ -114,6 +110,25 @@ public class HopsAclAuthorizer implements Authorizer {
 
         //get role of the principal on this project from database
         String projectName__userName = principal.getName();
+        
+        /*How to achieve broker authorization.
+            Brokers also have acls, not attached
+            to specific topics, for the purpose of inter-broker interaction. 
+            
+            My two options for broker authorization:
+            1: authorize every broker operation
+            2: prepare broker_acls table, like topic_acls table: 
+                a. check client is broker
+                b. create KafkaPrincipal instance accordingly 
+              This adds complexities in adding/removing acls, but I prefer if we go
+              for this approach.
+        
+        */
+        if(resource.resourceType().equals(kafka.security.auth.ResourceType$.MODULE$.fromString("Cluster"))){
+        authorizerLogger.log(Level.SEVERE, "This is cluster authorization for broker", new Object[]{projectName__userName});
+            System.out.println("This is the current client: "+projectName__userName);
+        return true;
+        }
 
         if (projectName__userName.equalsIgnoreCase("ANONYMOUS")) {
             authorizerLogger.log(Level.SEVERE, "No Acl found for cluster authorization, user: {0}", new Object[]{projectName__userName});
@@ -170,7 +185,7 @@ public class HopsAclAuthorizer implements Authorizer {
 //
 //        logAuditMessage(principal, authorized, operation, resource, host);
 
-        authorizerLogger.log(Level.INFO, "No Acl found for cluster authorization: authorization 2 ");
+        authorizerLogger.log(Level.INFO, "No Acl found for cluster authorization: {0}", new Object[]{authorized});
         return authorized;
     }
 

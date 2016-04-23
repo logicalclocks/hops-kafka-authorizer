@@ -10,13 +10,13 @@ import kafka.security.auth.Acl;
  *
  * @author misdess
  */
-public class ConnectionObject {
+public class DbConnection {
 
     private  Connection conn;
     PreparedStatement prepStatements;
 
     static final Logger CONNECTIONLOGGGER
-            = new LoggerProperties(ConnectionObject.class.getName()).getLogger();
+            = new LoggerProperties(DbConnection.class.getName()).getLogger();
     //Sql preparedStatements
     final String getAllAclsQuery = "SELECT * from topic_acls";
     final String getTopicAclQuery = "SELECT * from topic_acls where topic_name =?";
@@ -35,10 +35,10 @@ public class ConnectionObject {
             + "  host=? AND role=?";
     final String deleteAllTopicAcls = "DELETE from topic_acls where topic_name =?";
 
-    public ConnectionObject(String dbType, String dbUrl, String dbUserName, String dbPassword) {
+    public DbConnection(String dbType, String dbUrl, String dbUserName, String dbPassword) {
 
         CONNECTIONLOGGGER.log(Level.INFO, "testing database connection to: {0}", new Object[]{dbUrl});
-          //  bbc1.sics.se/hopsworks
+
         try {
             if (dbType.equalsIgnoreCase("mysql")) {
                 Class.forName("com.mysql.jdbc.Driver");
@@ -274,8 +274,8 @@ public class ConnectionObject {
 
     public String getPrinciplaRole(String projectName__userName) {
 
-        String projectName = projectName__userName.split("__", 2)[0];
-        String userName = projectName__userName.split("__", 2)[1];
+        String projectName = projectName__userName.split("__")[0];
+        String userName = projectName__userName.split("__")[1];
 
         String role = null;
         String projectId;
