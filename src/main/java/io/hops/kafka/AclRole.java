@@ -15,6 +15,9 @@ public class AclRole {
     String role;
     Acl acl;
 
+    public AclRole() {
+    }
+
     public AclRole(String role, Acl acl) {
         this.role = role;
         this.acl = acl;
