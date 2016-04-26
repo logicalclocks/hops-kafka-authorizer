@@ -94,10 +94,11 @@ public class HopsAclAuthorizer implements Authorizer {
 
         KafkaPrincipal principal = session.principal();
         String host = session.clientAddress().getHostAddress();
-
-        //get role of the principal on this project from database
+        String topicName = resource.name();
         String projectName__userName = principal.getName();
 
+        boolean authorized;
+        
         if (resource.resourceType().equals(
                 kafka.security.auth.ResourceType$.MODULE$.fromString("Cluster"))) {
             authorizerLogger.log(Level.SEVERE, "This is cluster authorization for broker",
@@ -106,20 +107,18 @@ public class HopsAclAuthorizer implements Authorizer {
         }
 
         if (projectName__userName.equalsIgnoreCase("ANONYMOUS")) {
-            authorizerLogger.log(Level.SEVERE, "No Acl found for cluster authorization, user: {0}", new Object[]{projectName__userName});
+            authorizerLogger.log(Level.SEVERE,
+                    "No Acl found for cluster authorization, user: {0}",
+                    new Object[]{projectName__userName});
             return true;
         }
 
-        String topicName = resource.name();
-
-        boolean authorized = dbConnection.isTopicBelongsToProject(projectName__userName.split("__")[0], topicName);
-
         java.util.Set<AclRole> resourceAcls = getTopicAcls(topicName);
-
+        
         String role = dbConnection.getUserRole(projectName__userName);
 
         //check if there is any Deny acl match that would disallow this operation.
-        Boolean denyMatch = aclMatch(session, operation, resource, principal,
+        Boolean denyMatch = aclMatch(operation, principal,
                 host, kafka.security.auth.Deny$.MODULE$, resourceAcls, role);
 
         //if principal is allowed to read or write we allow describe by default,
@@ -135,26 +134,27 @@ public class HopsAclAuthorizer implements Authorizer {
         //now check if there is any allow acl that will allow this operation.
         Boolean allowMatch = false;
         for (Operation op : ops) {
-            if (aclMatch(session, op, resource, principal, host,
+            if (aclMatch(op, principal, host,
                     kafka.security.auth.Allow$.MODULE$, resourceAcls, role)) {
                 allowMatch = true;
             }
         }
 
-        //we allow an operation if a user is a super user or if no acls are found and user has configured to allow all users
-        //when no acls are found or if no deny acls are found and at least one allow acls matches.
+        /*we allow an operation if a user is a super user or if no acls are
+        found and user has configured to allow all users when no acls are found
+        or if no deny acls are found and at least one allow acls matches.
+         */
         authorized = isSuperUser(principal)
-                || isEmptyAclAndAuthorized(operation, resource, principal, host, resourceAcls)
+                || isEmptyAclAndAuthorized(resourceAcls)
                 || (!denyMatch && allowMatch);
 
         //logAuditMessage(principal, authorized, operation, resource, host);
-        authorizerLogger.log(Level.INFO, "No Acl found for cluster authorization: {0}", new Object[]{authorized});
         return authorized;
     }
 
-    private Boolean aclMatch(RequestChannel.Session session, Operation operations,
-            Resource resource, KafkaPrincipal principal, String host,
-            PermissionType permissionType, java.util.Set<AclRole> acls, String role) {
+    private Boolean aclMatch(Operation operations, KafkaPrincipal principal,
+            String host, PermissionType permissionType,
+            java.util.Set<AclRole> acls, String role) {
 
         AclRole aclRole;
         Acl acl;
@@ -166,22 +166,16 @@ public class HopsAclAuthorizer implements Authorizer {
                     && (principal == acl.principal() || acl.principal() == Acl.WildCardPrincipal())
                     && (operations == acl.operation() || acl.operation() == kafka.security.auth.All$.MODULE$)
                     && (host.equalsIgnoreCase(acl.host()) || acl.host().equalsIgnoreCase(Acl.WildCardHost()))
-                    && (aclRole.getRole().equalsIgnoreCase(role) || aclRole.equals("*"))) {
-                authorizerLogger.log(Level.WARNING, "operation = {0}"
-                        + " on resource ={1} from host ={2} is {3} based on acl = {4}",
-                        new Object[]{operations, resource, host, permissionType, acl});
+                    && (aclRole.getRole().equalsIgnoreCase(role) || aclRole.getRole().equals("*"))) {
                 return true;
             }
         }
         return false;
     }
 
-    Boolean isEmptyAclAndAuthorized(Operation operation, Resource resource,
-            KafkaPrincipal principal, String host, java.util.Set<AclRole> acls) {
+    Boolean isEmptyAclAndAuthorized(java.util.Set<AclRole> acls) {
 
         if (acls.isEmpty()) {
-            authorizerLogger.log(Level.INFO, "No acl found for resource {0}, authorized = {1}",
-                    new Object[]{resource, shouldAllowEveryoneIfNoAclIsFound});
             return shouldAllowEveryoneIfNoAclIsFound;
         }
         return false;
@@ -196,21 +190,6 @@ public class HopsAclAuthorizer implements Authorizer {
             return true;
         }
         return false;
-    }
-
-    private void logAuditMessage(KafkaPrincipal principal, Boolean authorized,
-            Operation operation, Resource resource, String host) {
-
-        PermissionType permissionType;
-        if (authorized) {
-            permissionType = kafka.security.auth.Allow$.MODULE$;
-        } else {
-            permissionType = kafka.security.auth.Deny$.MODULE$;
-        }
-
-        authorizerLogger.log(Level.INFO,
-                "Perincipal = {0} is {1} Operation = {2} from host =  {3} on resource = {String topicName4}",
-                new Object[]{principal, permissionType, operation, host, resource});
     }
 
     @Override
@@ -238,7 +217,6 @@ public class HopsAclAuthorizer implements Authorizer {
 
         scala.collection.immutable.Map<Resource, Set<Acl>> immutablePrincipalAcls
                 = new scala.collection.immutable.HashMap<>();
-
         return immutablePrincipalAcls;
     }
 
