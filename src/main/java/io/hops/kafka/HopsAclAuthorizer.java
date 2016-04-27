@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package io.hops.kafka;
 
 import kafka.network.RequestChannel;
@@ -10,14 +5,12 @@ import kafka.security.auth.Acl;
 import kafka.security.auth.Authorizer;
 import kafka.security.auth.Operation;
 import kafka.security.auth.Resource;
-import kafka.security.auth.PermissionType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import scala.collection.immutable.Map;
 import scala.collection.immutable.Set;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.HashMap;
 import java.util.HashSet;
 
 import java.util.logging.Level;
@@ -114,29 +107,28 @@ public class HopsAclAuthorizer implements Authorizer {
             return true;
         }
 
-        java.util.Set<AclRole> resourceAcls = getTopicAcls(topicName);
+        java.util.Set<HopsAcl> resourceAcls = getTopicAcls(topicName);
 
         String role = dbConnection.getUserRole(projectName__userName);
 
         //check if there is any Deny acl match that would disallow this operation.
-        Boolean denyMatch = aclMatch(operation, principal,
-                host, kafka.security.auth.Deny$.MODULE$, resourceAcls, role);
+        Boolean denyMatch = aclMatch(operation.name(), projectName__userName,
+                host, "Deny", role, resourceAcls);
 
         //if principal is allowed to read or write we allow describe by default,
         //the reverse does not apply to Deny.
-        java.util.Set<Operation> ops = new HashSet<>();
-        ops.add(operation);
+        java.util.Set<String> ops = new HashSet<>();
+        ops.add(operation.name());
 
-        if (kafka.security.auth.Describe$.MODULE$ == operation) {
-            ops.add(kafka.security.auth.Write$.MODULE$);
-            ops.add(kafka.security.auth.Read$.MODULE$);
+        if (operation.name().equalsIgnoreCase("Describe")) {
+            ops.add("Write");
+            ops.add("Read");
         }
 
         //now check if there is any allow acl that will allow this operation.
         Boolean allowMatch = false;
-        for (Operation op : ops) {
-            if (aclMatch(op, principal, host,
-                    kafka.security.auth.Allow$.MODULE$, resourceAcls, role)) {
+        for (String op : ops) {
+            if (aclMatch(op, projectName__userName, host, "Allow", role, resourceAcls)) {
                 allowMatch = true;
             }
         }
@@ -153,28 +145,26 @@ public class HopsAclAuthorizer implements Authorizer {
         return authorized;
     }
 
-    private Boolean aclMatch(Operation operations, KafkaPrincipal principal,
-            String host, PermissionType permissionType,
-            java.util.Set<AclRole> acls, String role) {
+    private Boolean aclMatch(String operations, String principal,
+            String host, String permissionType, String role,
+            java.util.Set<HopsAcl> acls) {
 
-        AclRole aclRole;
-        Acl acl;
-        java.util.Iterator<AclRole> iter = acls.iterator();
+        HopsAcl acl;
+        java.util.Iterator<HopsAcl> iter = acls.iterator();
         for (; iter.hasNext();) {
-            aclRole = iter.next();
-            acl = aclRole.getAcl();
-            if (acl.permissionType() == permissionType
-                    && (principal == acl.principal() || acl.principal() == Acl.WildCardPrincipal())
-                    && (operations == acl.operation() || acl.operation() == kafka.security.auth.All$.MODULE$)
-                    && (host.equalsIgnoreCase(acl.host()) || acl.host().equalsIgnoreCase(Acl.WildCardHost()))
-                    && (aclRole.getRole().equalsIgnoreCase(role) || aclRole.getRole().equals("*"))) {
+            acl = iter.next();
+            if (acl.getPermissionType().equalsIgnoreCase(permissionType)
+                    && (acl.getPrincipal().equalsIgnoreCase(principal) || acl.getPrincipal().equals("*"))
+                    && (acl.getOperationType().equalsIgnoreCase(operations) || acl.getOperationType().equalsIgnoreCase("all"))
+                    && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals("*"))
+                    && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals("*"))) {
                 return true;
             }
         }
         return false;
     }
 
-    Boolean isEmptyAclAndAuthorized(java.util.Set<AclRole> acls) {
+    Boolean isEmptyAclAndAuthorized(java.util.Set<HopsAcl> acls) {
 
         if (acls.isEmpty()) {
             return shouldAllowEveryoneIfNoAclIsFound;
@@ -234,52 +224,44 @@ public class HopsAclAuthorizer implements Authorizer {
         dbConnection = null;
     }
 
-    private java.util.Set<AclRole> getTopicAcls(String topicName) {
+    private java.util.Set<HopsAcl> getTopicAcls(String topicName) {
 
-        java.util.Set<AclRole> resourceAcls = new java.util.HashSet<>();
-        AclRole acl;
-        KafkaPrincipal prin;
-        PermissionType perm;
-        String ht;
-        Operation op;
-        String username;
+        java.util.Set<HopsAcl> resourceAcls = new java.util.HashSet<>();
+        String principal;
+        String permission;
+        String operation;
+        String host;
+        String role;
 
         try {
             String projectName = dbConnection.getProjectName(topicName);
 
-            if(projectName == null){
+            if (projectName == null) {
                 return resourceAcls;
             }
             //get all the acls for the given topic
             ResultSet topicAcls = dbConnection.getTopicAcls(topicName);
             while (topicAcls.next()) {
-                username = projectName + "__" + topicAcls.getString("username");
-                prin = KafkaPrincipal.fromString("User:" + username);
-                perm = kafka.security.auth.PermissionType$.MODULE$.fromString(topicAcls.getString("permission_type"));
-                op = kafka.security.auth.Operation$.MODULE$.fromString(topicAcls.getString("operation_type"));
-                ht = topicAcls.getString("host");
-
-                acl = new AclRole(topicAcls.getString("role"),
-                        new Acl(prin, perm, ht, op));
-                resourceAcls.add(acl);
+                principal = projectName + "__" + topicAcls.getString("username");
+                permission = topicAcls.getString("permission_type");
+                operation = topicAcls.getString("operation_type");
+                host = topicAcls.getString("host");
+                role = topicAcls.getString("role");
+                resourceAcls.add(new HopsAcl(principal, permission, host, operation, role));
             }
             //get all the acls for wildcard topics
             ResultSet wildcardTopicAcls = dbConnection.getTopicAcls("*");
             while (wildcardTopicAcls.next()) {
-                username = projectName + "__" + topicAcls.getString("username");
-                prin = KafkaPrincipal.fromString("User:" + username);
-                perm = kafka.security.auth.PermissionType$.MODULE$.fromString(wildcardTopicAcls.getString("permission_type"));
-                op = kafka.security.auth.Operation$.MODULE$.fromString(wildcardTopicAcls.getString("operation_type"));
-                ht = wildcardTopicAcls.getString("host");
-
-                acl = new AclRole(wildcardTopicAcls.getString("role"),
-                        new Acl(prin, perm, ht, op));
-                resourceAcls.add(acl);
+                principal = projectName + "__" + topicAcls.getString("username");
+                permission = topicAcls.getString("permission_type");
+                operation = topicAcls.getString("operation_type");
+                host = topicAcls.getString("host");
+                role = topicAcls.getString("role");
+                resourceAcls.add(new HopsAcl(principal, permission, host, operation, role));
             }
         } catch (SQLException ex) {
             Logger.getLogger(HopsAclAuthorizer.class.getName()).log(Level.SEVERE, null, ex);
         }
-
         return resourceAcls;
     }
 }

@@ -80,25 +80,17 @@ public class DbConnection {
         try {
             prepStatements = conn.prepareCall("SELECT from project where projectname=?");
             prepStatements.setString(1, projectName);
-            ResultSet resutlSet = prepStatements.executeQuery();
-            while (resutlSet.next()) {
-                projectId = resutlSet.getString("id");
-            }
+            projectId = prepStatements.executeQuery().getString("id");
 
             prepStatements = conn.prepareCall("SELECT from user where username=?");
             prepStatements.setString(1, userName);
-            resutlSet = prepStatements.executeQuery();
-            while (resutlSet.next()) {
-                email = resutlSet.getString("useremail");
-            }
+            email = prepStatements.executeQuery().getString("useremail");
+
             prepStatements = conn.prepareCall("SELECT from project_team where"
                     + " project_id=? AND team_member=?");
             prepStatements.setString(1, projectId);
             prepStatements.setString(1, email);
-            resutlSet = prepStatements.executeQuery();
-            if (resutlSet.next()) {
-                role = resutlSet.getString("team_role");
-            }
+            role = prepStatements.executeQuery().getString("team_role");
         } catch (Exception e) {
         }
         return role;

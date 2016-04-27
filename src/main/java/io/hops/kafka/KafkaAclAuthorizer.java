@@ -50,7 +50,7 @@ public class KafkaAclAuthorizer implements Authorizer {
     
     ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    private java.util.Map<Resource, Set<AclRole>> aclCaches = new java.util.HashMap<>();
+    private java.util.Map<Resource, Set<HopsAcl>> aclCaches = new java.util.HashMap<>();
     
     private final String databaseTypeProp ="database.type";
     private final String databaseUrlProp = "database.url";
@@ -380,10 +380,10 @@ return false;
         java.util.Map<Resource, Set<Acl>> acls = new java.util.HashMap<>();
         java.util.Set<Acl> acl = new java.util.HashSet<>();
 
-        for (java.util.Map.Entry<Resource, Set<AclRole>> entry : aclCaches.entrySet()) {
+        for (java.util.Map.Entry<Resource, Set<HopsAcl>> entry : aclCaches.entrySet()) {
             Resource key = entry.getKey();
-            Set<AclRole> value = entry.getValue();
-            for (scala.collection.Iterator<AclRole> iterator = value.iterator(); iterator.hasNext();) {
+            Set<HopsAcl> value = entry.getValue();
+            for (scala.collection.Iterator<HopsAcl> iterator = value.iterator(); iterator.hasNext();) {
                 acl.add(iterator.next().getAcl());
 
             }
@@ -408,9 +408,9 @@ return false;
     private void loadAllAcls() {
 
         String topicName;
-        Set<AclRole> topicAcls;
-        java.util.Map<Resource, java.util.Set<AclRole>> allAcls = new java.util.HashMap<>();
-        java.util.Set<AclRole> aclSet = new java.util.HashSet<>();
+        Set<HopsAcl> topicAcls;
+        java.util.Map<Resource, java.util.Set<HopsAcl>> allAcls = new java.util.HashMap<>();
+        java.util.Set<HopsAcl> aclSet = new java.util.HashSet<>();
 
         KafkaPrincipal principal;
         PermissionType permission;
@@ -432,7 +432,7 @@ return false;
                 role = resultSet.getString("role");
 
                 Acl TopicAcl = new Acl(principal, permission, host, operation);
-                AclRole aclRole = new AclRole(role, TopicAcl);
+                HopsAcl aclRole = new HopsAcl(role, TopicAcl);
                 
                 Resource resource = Resource.fromString("Topic:" + topicName);
                 if (allAcls.keySet().contains(resource)) {
@@ -446,7 +446,7 @@ return false;
            CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
         }
 
-        for (java.util.Map.Entry<Resource, java.util.Set<AclRole>> entry : allAcls.entrySet()) {
+        for (java.util.Map.Entry<Resource, java.util.Set<HopsAcl>> entry : allAcls.entrySet()) {
             Resource resource = entry.getKey();
             //change the topic acls from mutable to immutable scala set collection using JavaConverter$
             topicAcls = JavaConverters$.MODULE$.asScalaSetConverter(entry.getValue()).asScala().toSet();
@@ -454,7 +454,7 @@ return false;
         }
     }
 
-    private void updateCache(Resource resource, Set<AclRole> acls) {
+    private void updateCache(Resource resource, Set<HopsAcl> acls) {
 
         try {
             lock.writeLock().lock();
