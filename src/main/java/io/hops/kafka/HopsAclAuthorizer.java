@@ -17,6 +17,7 @@ import scala.collection.immutable.Set;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.HashSet;
 
 import java.util.logging.Level;
@@ -98,7 +99,7 @@ public class HopsAclAuthorizer implements Authorizer {
         String projectName__userName = principal.getName();
 
         boolean authorized;
-        
+
         if (resource.resourceType().equals(
                 kafka.security.auth.ResourceType$.MODULE$.fromString("Cluster"))) {
             authorizerLogger.log(Level.SEVERE, "This is cluster authorization for broker",
@@ -114,7 +115,7 @@ public class HopsAclAuthorizer implements Authorizer {
         }
 
         java.util.Set<AclRole> resourceAcls = getTopicAcls(topicName);
-        
+
         String role = dbConnection.getUserRole(projectName__userName);
 
         //check if there is any Deny acl match that would disallow this operation.
@@ -241,13 +242,19 @@ public class HopsAclAuthorizer implements Authorizer {
         PermissionType perm;
         String ht;
         Operation op;
+        String username;
 
         try {
+            String projectName = dbConnection.getProjectName(topicName);
 
+            if(projectName == null){
+                return resourceAcls;
+            }
             //get all the acls for the given topic
             ResultSet topicAcls = dbConnection.getTopicAcls(topicName);
             while (topicAcls.next()) {
-                prin = KafkaPrincipal.fromString("User:" + topicAcls.getString("user_id"));
+                username = projectName + "__" + topicAcls.getString("username");
+                prin = KafkaPrincipal.fromString("User:" + username);
                 perm = kafka.security.auth.PermissionType$.MODULE$.fromString(topicAcls.getString("permission_type"));
                 op = kafka.security.auth.Operation$.MODULE$.fromString(topicAcls.getString("operation_type"));
                 ht = topicAcls.getString("host");
@@ -256,11 +263,11 @@ public class HopsAclAuthorizer implements Authorizer {
                         new Acl(prin, perm, ht, op));
                 resourceAcls.add(acl);
             }
-            //get all the acls for wildcard topic
+            //get all the acls for wildcard topics
             ResultSet wildcardTopicAcls = dbConnection.getTopicAcls("*");
             while (wildcardTopicAcls.next()) {
-
-                prin = KafkaPrincipal.fromString("User:" + wildcardTopicAcls.getString("user_id"));
+                username = projectName + "__" + topicAcls.getString("username");
+                prin = KafkaPrincipal.fromString("User:" + username);
                 perm = kafka.security.auth.PermissionType$.MODULE$.fromString(wildcardTopicAcls.getString("permission_type"));
                 op = kafka.security.auth.Operation$.MODULE$.fromString(wildcardTopicAcls.getString("operation_type"));
                 ht = wildcardTopicAcls.getString("host");

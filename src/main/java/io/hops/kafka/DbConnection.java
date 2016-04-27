@@ -32,6 +32,29 @@ public class DbConnection {
         }
     }
 
+    public String getProjectName(String topicName) {
+
+        String projectId = null;
+        String projectName = null;
+        try {
+            prepStatements = conn.prepareStatement("SELECT project_id from topic_acls where topic_name =?");
+            prepStatements.setString(1, topicName);
+            projectId = prepStatements.executeQuery().getString("project_id");
+
+            if (projectId == null) {
+                CONNECTIONLOGGGER.log(Level.SEVERE, null,
+                        "The speficied project doesnt exist in database");
+                return null;
+            }
+            prepStatements = conn.prepareStatement("SELECT id, projectname from project where id =?");
+            prepStatements.setString(1, projectId);
+            projectName = prepStatements.executeQuery().getString("projectname");
+        } catch (SQLException ex) {
+            CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
+        }
+        return projectName;
+    }
+
     public ResultSet getTopicAcls(String topicName) {
 
         ResultSet result = null;
