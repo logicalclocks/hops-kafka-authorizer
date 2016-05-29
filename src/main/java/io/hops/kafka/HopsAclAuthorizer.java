@@ -23,7 +23,7 @@ import java.util.logging.Logger;
 public class HopsAclAuthorizer implements Authorizer {
 
     private static Logger authorizerLogger
-            = new LoggerProperties(KafkaAclAuthorizer.class.getName()).getLogger();
+            = new LoggerProperties(HopsAclAuthorizer.class.getName()).getLogger();
 
     //List of users that will be treated as super users and will have access to 
     //all the resources for all actions from all hosts, defaults to no super users.
@@ -95,7 +95,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
         if (resource.resourceType().equals(
                 kafka.security.auth.ResourceType$.MODULE$.fromString("Cluster"))) {
-            authorizerLogger.log(Level.SEVERE, "This is cluster authorization for broker",
+            authorizerLogger.log(Level.SEVERE, "This is cluster authorization for broker: {0}",
                     new Object[]{projectName__userName});
             return true;
         }
