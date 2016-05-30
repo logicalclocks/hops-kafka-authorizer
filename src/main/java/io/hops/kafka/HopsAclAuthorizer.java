@@ -241,7 +241,8 @@ public class HopsAclAuthorizer implements Authorizer {
             //get all the acls for the given topic
             ResultSet topicAcls = dbConnection.getTopicAcls(topicName);
             while (topicAcls.next()) {
-                principal = projectName + "__" + topicAcls.getString("username");
+               // principal = projectName + "__" + topicAcls.getString("username");
+                principal = topicAcls.getString("principal");
                 permission = topicAcls.getString("permission_type");
                 operation = topicAcls.getString("operation_type");
                 host = topicAcls.getString("host");
@@ -251,7 +252,8 @@ public class HopsAclAuthorizer implements Authorizer {
             //get all the acls for wildcard topics
             ResultSet wildcardTopicAcls = dbConnection.getTopicAcls("*");
             while (wildcardTopicAcls.next()) {
-                principal = projectName + "__" + topicAcls.getString("username");
+               // principal = projectName + "__" + topicAcls.getString("username");
+                principal = topicAcls.getString("principal");
                 permission = topicAcls.getString("permission_type");
                 operation = topicAcls.getString("operation_type");
                 host = topicAcls.getString("host");
