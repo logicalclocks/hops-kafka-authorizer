@@ -22,9 +22,8 @@ import java.util.logging.Logger;
  */
 public class HopsAclAuthorizer implements Authorizer {
 
-    private static Logger authorizerLogger
-            = new LoggerProperties(HopsAclAuthorizer.class.getName()).getLogger();
-
+    private static final Logger authorizerLogger = Logger.
+      getLogger(HopsAclAuthorizer.class.getName());
     //List of users that will be treated as super users and will have access to 
     //all the resources for all actions from all hosts, defaults to no super users.
     private java.util.Set<KafkaPrincipal> superUsers = new java.util.HashSet<>();

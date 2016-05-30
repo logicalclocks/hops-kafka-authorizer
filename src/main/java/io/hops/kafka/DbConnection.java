@@ -12,10 +12,9 @@ public class DbConnection {
 
     private Connection conn;
     PreparedStatement prepStatements;
-
-    static final Logger CONNECTIONLOGGGER
-            = new LoggerProperties(DbConnection.class.getName()).getLogger();
-
+    private static final Logger CONNECTIONLOGGGER = Logger.
+      getLogger(DbConnection.class.getName());
+    
     public DbConnection(String dbType, String dbUrl, String dbUserName, String dbPassword) {
 
         CONNECTIONLOGGGER.log(Level.INFO, "testing database connection to: {0}", new Object[]{dbUrl});
