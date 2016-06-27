@@ -22,8 +22,16 @@ import java.util.logging.Logger;
  */
 public class HopsAclAuthorizer implements Authorizer {
 
-    private static final Logger authorizerLogger = Logger.
-      getLogger(HopsAclAuthorizer.class.getName());
+    private final String SEMI_COLON = ";";
+
+    public final String ANONYMOUS = "ANONYMOUS";
+
+    public final String CLUSTER = "Cluster";
+    
+    public final String WILDCARD = "*";
+
+    private static final Logger AUTHORIZERLOGGER = Logger.
+            getLogger(HopsAclAuthorizer.class.getName());
     //List of users that will be treated as super users and will have access to 
     //all the resources for all actions from all hosts, defaults to no super users.
     private java.util.Set<KafkaPrincipal> superUsers = new java.util.HashSet<>();
@@ -58,7 +66,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
         if (obj != null) {
             String superUsersStr = (String) obj;
-            String[] superUserStrings = superUsersStr.split(";");
+            String[] superUserStrings = superUsersStr.split(SEMI_COLON);
 
             for (String user : superUserStrings) {
                 superUsers.add(KafkaPrincipal.fromString(user.trim()));
@@ -93,14 +101,14 @@ public class HopsAclAuthorizer implements Authorizer {
         boolean authorized;
 
         if (resource.resourceType().equals(
-                kafka.security.auth.ResourceType$.MODULE$.fromString("Cluster"))) {
-            authorizerLogger.log(Level.SEVERE, "This is cluster authorization for broker: {0}",
+                kafka.security.auth.ResourceType$.MODULE$.fromString(CLUSTER))) {
+            AUTHORIZERLOGGER.log(Level.SEVERE, "This is cluster authorization for broker: {0}",
                     new Object[]{projectName__userName});
             return true;
         }
 
-        if (projectName__userName.equalsIgnoreCase("ANONYMOUS")) {
-            authorizerLogger.log(Level.SEVERE,
+        if (projectName__userName.equalsIgnoreCase(ANONYMOUS)) {
+            AUTHORIZERLOGGER.log(Level.SEVERE,
                     "No Acl found for cluster authorization, user: {0}",
                     new Object[]{projectName__userName});
             return true;
@@ -153,10 +161,10 @@ public class HopsAclAuthorizer implements Authorizer {
         for (; iter.hasNext();) {
             acl = iter.next();
             if (acl.getPermissionType().equalsIgnoreCase(permissionType)
-                    && (acl.getPrincipal().equalsIgnoreCase(principal) || acl.getPrincipal().equals("*"))
+                    && (acl.getPrincipal().equalsIgnoreCase(principal) || acl.getPrincipal().equals(WILDCARD))
                     && (acl.getOperationType().equalsIgnoreCase(operations) || acl.getOperationType().equalsIgnoreCase("all"))
-                    && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals("*"))
-                    && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals("*"))) {
+                    && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(WILDCARD))
+                    && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(WILDCARD))) {
                 return true;
             }
         }
@@ -174,7 +182,7 @@ public class HopsAclAuthorizer implements Authorizer {
     Boolean isSuperUser(KafkaPrincipal principal) {
 
         if (superUsers.contains(principal)) {
-            authorizerLogger.log(Level.INFO,
+            AUTHORIZERLOGGER.log(Level.INFO,
                     "principal = {0} is a super user, allowing operation without checking acls.",
                     new Object[]{principal});
             return true;
@@ -205,6 +213,7 @@ public class HopsAclAuthorizer implements Authorizer {
     @Override
     public Map<Resource, Set<Acl>> getAcls(KafkaPrincipal principal) {
 
+        //not used in this authorizer
         scala.collection.immutable.Map<Resource, Set<Acl>> immutablePrincipalAcls
                 = new scala.collection.immutable.HashMap<>();
         return immutablePrincipalAcls;
@@ -213,6 +222,7 @@ public class HopsAclAuthorizer implements Authorizer {
     @Override
     public Map<Resource, Set<Acl>> getAcls() {
 
+        //not used in this authorizer
         scala.collection.immutable.Map<Resource, Set<Acl>> aclCache
                 = new scala.collection.immutable.HashMap<>();
         return aclCache;
@@ -241,7 +251,7 @@ public class HopsAclAuthorizer implements Authorizer {
             //get all the acls for the given topic
             ResultSet topicAcls = dbConnection.getTopicAcls(topicName);
             while (topicAcls.next()) {
-               // principal = projectName + "__" + topicAcls.getString("username");
+                // principal = projectName + "__" + topicAcls.getString("username");
                 principal = topicAcls.getString("principal");
                 permission = topicAcls.getString("permission_type");
                 operation = topicAcls.getString("operation_type");
@@ -250,9 +260,9 @@ public class HopsAclAuthorizer implements Authorizer {
                 resourceAcls.add(new HopsAcl(principal, permission, host, operation, role));
             }
             //get all the acls for wildcard topics
-            ResultSet wildcardTopicAcls = dbConnection.getTopicAcls("*");
+            ResultSet wildcardTopicAcls = dbConnection.getTopicAcls(WILDCARD);
             while (wildcardTopicAcls.next()) {
-               // principal = projectName + "__" + topicAcls.getString("username");
+                // principal = projectName + "__" + topicAcls.getString("username");
                 principal = topicAcls.getString("principal");
                 permission = topicAcls.getString("permission_type");
                 operation = topicAcls.getString("operation_type");
@@ -261,7 +271,7 @@ public class HopsAclAuthorizer implements Authorizer {
                 resourceAcls.add(new HopsAcl(principal, permission, host, operation, role));
             }
         } catch (SQLException ex) {
-            Logger.getLogger(HopsAclAuthorizer.class.getName()).log(Level.SEVERE, null, ex);
+            AUTHORIZERLOGGER.log(Level.SEVERE, null, ex.toString());
         }
         return resourceAcls;
     }

@@ -27,6 +27,14 @@ import org.apache.kafka.common.security.auth.PrincipalBuilder;
  */
 public class HopsPrincipalBuilder implements PrincipalBuilder {
 
+    public final String COLON_SEPARATOR = ":";
+    
+    public final String COMMA_SEPARATOR = ",";
+    
+    public final String ASSIGN_SEPARATOR = "=";
+
+    public final String ANONYMOUS = "ANONYMOUS";
+
     @Override
     public void configure(Map<String, ?> configs) {
 
@@ -49,12 +57,12 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
             }
 
             String TLSUserName = principal.getName();
-            if (TLSUserName.equalsIgnoreCase("ANONYMOUS")) {
+            if (TLSUserName.equalsIgnoreCase(ANONYMOUS)) {
                 return principal;
             }
 
-            String userType = principal.toString().split(":")[0];
-            String projetcName__userName = TLSUserName.split(",", 6)[0].split("=")[1];
+            String userType = principal.toString().split(COLON_SEPARATOR)[0];
+            String projetcName__userName = TLSUserName.split(COMMA_SEPARATOR, 6)[0].split(ASSIGN_SEPARATOR)[1];
 
             Principal kafkaPrincipal = new KafkaPrincipal(userType, projetcName__userName);
             return kafkaPrincipal;

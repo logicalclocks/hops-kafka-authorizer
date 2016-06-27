@@ -10,11 +10,15 @@ import java.util.logging.Logger;
  */
 public class DbConnection {
 
+    private final String TWO_UNDERSCORES = "__";
+
     private Connection conn;
-    PreparedStatement prepStatements;
+
+    private PreparedStatement prepStatements;
+
     private static final Logger CONNECTIONLOGGGER = Logger.
-      getLogger(DbConnection.class.getName());
-    
+            getLogger(DbConnection.class.getName());
+
     public DbConnection(String dbType, String dbUrl, String dbUserName, String dbPassword) {
 
         CONNECTIONLOGGGER.log(Level.INFO, "testing database connection to: {0}", new Object[]{dbUrl});
@@ -33,12 +37,11 @@ public class DbConnection {
 
     public String getProjectName(String topicName) {
 
-        String projectId = null;
         String projectName = null;
         try {
             prepStatements = conn.prepareStatement("SELECT project_id from topic_acls where topic_name =?");
             prepStatements.setString(1, topicName);
-            projectId = prepStatements.executeQuery().getString("project_id");
+            String projectId = prepStatements.executeQuery().getString("project_id");
 
             if (projectId == null) {
                 CONNECTIONLOGGGER.log(Level.SEVERE, null,
@@ -69,28 +72,27 @@ public class DbConnection {
 
     public String getUserRole(String projectName__userName) {
 
-        String projectName = projectName__userName.split("__")[0];
-        String userName = projectName__userName.split("__")[1];
+        String projectName = projectName__userName.split(TWO_UNDERSCORES)[0];
+        String userName = projectName__userName.split(TWO_UNDERSCORES)[1];
 
         String role = null;
-        String projectId = null;
-        String email = null;
 
         try {
-            prepStatements = conn.prepareCall("SELECT from project where projectname=?");
+            prepStatements = conn.prepareStatement("SELECT * from project where projectname=?");
             prepStatements.setString(1, projectName);
-            projectId = prepStatements.executeQuery().getString("id");
+            String projectId = prepStatements.executeQuery().getString("id");
 
-            prepStatements = conn.prepareCall("SELECT from user where username=?");
+            prepStatements = conn.prepareStatement("SELECT * from user where username=?");
             prepStatements.setString(1, userName);
-            email = prepStatements.executeQuery().getString("useremail");
+            String email = prepStatements.executeQuery().getString("useremail");
 
-            prepStatements = conn.prepareCall("SELECT from project_team where"
+            prepStatements = conn.prepareStatement("SELECT * from project_team where"
                     + " project_id=? AND team_member=?");
             prepStatements.setString(1, projectId);
             prepStatements.setString(1, email);
             role = prepStatements.executeQuery().getString("team_role");
-        } catch (Exception e) {
+        } catch (Exception ex) {
+            CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
         }
         return role;
     }
