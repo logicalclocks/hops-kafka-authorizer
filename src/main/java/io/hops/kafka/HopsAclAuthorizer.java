@@ -145,7 +145,7 @@ public class HopsAclAuthorizer implements Authorizer {
         or if no deny acls are found and at least one allow acls matches.
          */
         authorized = isSuperUser(principal)
-                || isEmptyAclAndAuthorized(resourceAcls)
+                || isEmptyAclAndAuthorized(resourceAcls, topicName, projectName__userName)
                 || (!denyMatch && allowMatch);
 
         //logAuditMessage(principal, authorized, operation, resource, host);
@@ -171,9 +171,14 @@ public class HopsAclAuthorizer implements Authorizer {
         return false;
     }
 
-    Boolean isEmptyAclAndAuthorized(java.util.Set<HopsAcl> acls) {
+    Boolean isEmptyAclAndAuthorized(java.util.Set<HopsAcl> acls,
+            String topicName, String principalName) {
 
         if (acls.isEmpty()) {
+            //Authorize if user is member of the toipc owner project
+            if (dbConnection.isPrincipalMemberOfTopicOwnerProject(topicName, principalName)) {
+                return true;
+            }
             return shouldAllowEveryoneIfNoAclIsFound;
         }
         return false;

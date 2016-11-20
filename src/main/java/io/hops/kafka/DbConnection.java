@@ -45,7 +45,7 @@ public class DbConnection {
 
             if (projectId == null) {
                 CONNECTIONLOGGGER.log(Level.SEVERE, null,
-                        "The speficied project doesnt exist in database");
+                        "The speficied project doesn't exist in database");
                 return null;
             }
             prepStatements = conn.prepareStatement("SELECT id, projectname from project where id =?");
@@ -75,25 +75,55 @@ public class DbConnection {
         String projectName = projectName__userName.split(TWO_UNDERSCORES)[0];
         String userName = projectName__userName.split(TWO_UNDERSCORES)[1];
 
-        String role = null;
-
         try {
             prepStatements = conn.prepareStatement("SELECT * from project where projectname=?");
             prepStatements.setString(1, projectName);
             String projectId = prepStatements.executeQuery().getString("id");
 
-            prepStatements = conn.prepareStatement("SELECT * from user where username=?");
+            return getUserRole(projectId, userName);
+        } catch (SQLException ex) {
+            CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
+        }
+        return null;
+    }
+
+    public String getUserRole(String projectId, String userName) {
+
+        String role = null;
+        try {
+            prepStatements = conn.prepareStatement("SELECT * from users where username=?");
             prepStatements.setString(1, userName);
-            String email = prepStatements.executeQuery().getString("useremail");
+            String email = prepStatements.executeQuery().getString("email");
 
             prepStatements = conn.prepareStatement("SELECT * from project_team where"
                     + " project_id=? AND team_member=?");
             prepStatements.setString(1, projectId);
-            prepStatements.setString(1, email);
+            prepStatements.setString(2, email);
             role = prepStatements.executeQuery().getString("team_role");
-        } catch (Exception ex) {
-            CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
+        } catch (SQLException ex) {
+            return role;
         }
         return role;
+    }
+
+    public boolean isPrincipalMemberOfTopicOwnerProject(String topicName,
+            String projectName__userName) {
+
+        String userName = projectName__userName.split(TWO_UNDERSCORES)[1];
+        try {
+            prepStatements = conn.prepareStatement("SELECT * from project_topics where topicName=?");
+            prepStatements.setString(1, topicName);
+
+            String topicOwnerProjectId = prepStatements.executeQuery().getString("project_id");
+
+            //if the user has a role, then it is a member of the topic owner project
+            if (getUserRole(topicOwnerProjectId, userName) != null) {
+                return true;
+            }
+        } catch (SQLException ex) {
+            return false;
+        }
+
+        return false;
     }
 }
