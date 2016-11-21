@@ -29,6 +29,20 @@ public class HopsAclAuthorizer implements Authorizer {
     public final String CLUSTER = "Cluster";
     
     public final String WILDCARD = "*";
+    
+    public final String ALLOW ="Allow";
+    public final String DENY ="Deny";
+    public final String READ ="Read";
+    public final String WRITE ="Write";
+    public final String DESCRIBE ="Describe";
+    public final String ALL ="All";
+    
+    public final String PRINCIPAL ="principal";
+    public final String PERMISSION_TYPE ="permission_type";
+    public final String OPERATION_TYPE ="operation_type";
+    public final String HOST ="host";
+     public final String ROLE ="role";
+    
 
     private static final Logger AUTHORIZERLOGGER = Logger.
             getLogger(HopsAclAuthorizer.class.getName());
@@ -43,10 +57,10 @@ public class HopsAclAuthorizer implements Authorizer {
     private static final String AllowEveryoneIfNoAclIsFoundProp
             = "allow.everyone.if.no.acl.found";
 
-    private final String databaseTypeProp = "database.type";
-    private final String databaseUrlProp = "database.url";
-    private final String databaseUserNameProp = "database.username";
-    private final String databasePasswordProp = "database.password";
+    private final String DATABASE_TYPE = "database.type";
+    private final String DATABASE_URL = "database.url";
+    private final String DATABASE_USERNAME = "database.username";
+    private final String DATABASE_PASSWORD = "database.password";
 
     DbConnection dbConnection;
 
@@ -75,10 +89,10 @@ public class HopsAclAuthorizer implements Authorizer {
             superUsers = new HashSet<>();
         }
 
-        databaseType = configs.get(databaseTypeProp).toString();
-        databaseUrl = configs.get(databaseUrlProp).toString();
-        databaseUserName = configs.get(databaseUserNameProp).toString();
-        databasePassword = configs.get(databasePasswordProp).toString();
+        databaseType = configs.get(DATABASE_TYPE).toString();
+        databaseUrl = configs.get(DATABASE_URL).toString();
+        databaseUserName = configs.get(DATABASE_USERNAME).toString();
+        databasePassword = configs.get(DATABASE_PASSWORD).toString();
         //initialize database connection.
         dbConnection = new DbConnection(databaseType, databaseUrl,
                 databaseUserName, databasePassword);
@@ -120,22 +134,22 @@ public class HopsAclAuthorizer implements Authorizer {
 
         //check if there is any Deny acl match that would disallow this operation.
         Boolean denyMatch = aclMatch(operation.name(), projectName__userName,
-                host, "Deny", role, resourceAcls);
+                host, DENY, role, resourceAcls);
 
         //if principal is allowed to read or write we allow describe by default,
         //the reverse does not apply to Deny.
         java.util.Set<String> ops = new HashSet<>();
         ops.add(operation.name());
 
-        if (operation.name().equalsIgnoreCase("Describe")) {
-            ops.add("Write");
-            ops.add("Read");
+        if (operation.name().equalsIgnoreCase(DESCRIBE)) {
+            ops.add(WRITE);
+            ops.add(READ);
         }
 
         //now check if there is any allow acl that will allow this operation.
         Boolean allowMatch = false;
         for (String op : ops) {
-            if (aclMatch(op, projectName__userName, host, "Allow", role, resourceAcls)) {
+            if (aclMatch(op, projectName__userName, host, ALLOW, role, resourceAcls)) {
                 allowMatch = true;
             }
         }
@@ -162,7 +176,7 @@ public class HopsAclAuthorizer implements Authorizer {
             acl = iter.next();
             if (acl.getPermissionType().equalsIgnoreCase(permissionType)
                     && (acl.getPrincipal().equalsIgnoreCase(principal) || acl.getPrincipal().equals(WILDCARD))
-                    && (acl.getOperationType().equalsIgnoreCase(operations) || acl.getOperationType().equalsIgnoreCase("all"))
+                    && (acl.getOperationType().equalsIgnoreCase(operations) || acl.getOperationType().equalsIgnoreCase(ALL))
                     && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(WILDCARD))
                     && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(WILDCARD))) {
                 return true;
@@ -257,22 +271,22 @@ public class HopsAclAuthorizer implements Authorizer {
             ResultSet topicAcls = dbConnection.getTopicAcls(topicName);
             while (topicAcls.next()) {
                 // principal = projectName + "__" + topicAcls.getString("username");
-                principal = topicAcls.getString("principal");
-                permission = topicAcls.getString("permission_type");
-                operation = topicAcls.getString("operation_type");
-                host = topicAcls.getString("host");
-                role = topicAcls.getString("role");
+                principal = topicAcls.getString(PRINCIPAL);
+                permission = topicAcls.getString(PERMISSION_TYPE);
+                operation = topicAcls.getString(OPERATION_TYPE);
+                host = topicAcls.getString(HOST);
+                role = topicAcls.getString(ROLE);
                 resourceAcls.add(new HopsAcl(principal, permission, host, operation, role));
             }
             //get all the acls for wildcard topics
             ResultSet wildcardTopicAcls = dbConnection.getTopicAcls(WILDCARD);
             while (wildcardTopicAcls.next()) {
                 // principal = projectName + "__" + topicAcls.getString("username");
-                principal = topicAcls.getString("principal");
-                permission = topicAcls.getString("permission_type");
-                operation = topicAcls.getString("operation_type");
-                host = topicAcls.getString("host");
-                role = topicAcls.getString("role");
+                principal = topicAcls.getString(PRINCIPAL);
+                permission = topicAcls.getString(PERMISSION_TYPE);
+                operation = topicAcls.getString(OPERATION_TYPE);
+                host = topicAcls.getString(HOST);
+                role = topicAcls.getString(ROLE);
                 resourceAcls.add(new HopsAcl(principal, permission, host, operation, role));
             }
         } catch (SQLException ex) {

@@ -38,10 +38,14 @@ public class DbConnection {
     public String getProjectName(String topicName) {
 
         String projectName = null;
+        String projectId = null;
         try {
             prepStatements = conn.prepareStatement("SELECT project_id from topic_acls where topic_name =?");
             prepStatements.setString(1, topicName);
-            String projectId = prepStatements.executeQuery().getString("project_id");
+            ResultSet rst = prepStatements.executeQuery();
+            while (rst.next()) {
+                projectId = rst.getString("project_id");
+            }
 
             if (projectId == null) {
                 CONNECTIONLOGGGER.log(Level.SEVERE, null,
@@ -50,7 +54,13 @@ public class DbConnection {
             }
             prepStatements = conn.prepareStatement("SELECT id, projectname from project where id =?");
             prepStatements.setString(1, projectId);
-            projectName = prepStatements.executeQuery().getString("projectname");
+
+            
+            rst = prepStatements.executeQuery();
+            while (rst.next()) {
+                projectName = rst.getString("projectname");
+            }
+
         } catch (SQLException ex) {
             CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
         }
@@ -75,10 +85,17 @@ public class DbConnection {
         String projectName = projectName__userName.split(TWO_UNDERSCORES)[0];
         String userName = projectName__userName.split(TWO_UNDERSCORES)[1];
 
+        String projectId = null;
         try {
             prepStatements = conn.prepareStatement("SELECT * from project where projectname=?");
             prepStatements.setString(1, projectName);
-            String projectId = prepStatements.executeQuery().getString("id");
+            ResultSet rst = prepStatements.executeQuery();
+            while (rst.next()) {
+                projectId = rst.getString("id");
+            }
+            if (projectId == null) {
+                return null;
+            }
 
             return getUserRole(projectId, userName);
         } catch (SQLException ex) {
@@ -93,13 +110,21 @@ public class DbConnection {
         try {
             prepStatements = conn.prepareStatement("SELECT * from users where username=?");
             prepStatements.setString(1, userName);
-            String email = prepStatements.executeQuery().getString("email");
+
+            ResultSet rst = prepStatements.executeQuery();
+            String email = null;
+            while (rst.next()) {
+                email = rst.getString("email");
+            }
 
             prepStatements = conn.prepareStatement("SELECT * from project_team where"
                     + " project_id=? AND team_member=?");
             prepStatements.setString(1, projectId);
             prepStatements.setString(2, email);
-            role = prepStatements.executeQuery().getString("team_role");
+            rst = prepStatements.executeQuery();
+            while (rst.next()) {
+                role = rst.getString("team_role");
+            }
         } catch (SQLException ex) {
             return role;
         }
@@ -110,12 +135,20 @@ public class DbConnection {
             String projectName__userName) {
 
         String userName = projectName__userName.split(TWO_UNDERSCORES)[1];
+
+        String topicOwnerProjectId = null;
         try {
             prepStatements = conn.prepareStatement("SELECT * from project_topics where topicName=?");
             prepStatements.setString(1, topicName);
 
-            String topicOwnerProjectId = prepStatements.executeQuery().getString("project_id");
+            ResultSet rst = prepStatements.executeQuery();
+            while (rst.next()) {
+                topicOwnerProjectId = rst.getString("project_id");
 
+            }
+            if (topicOwnerProjectId == null) {
+                return false;
+            }
             //if the user has a role, then it is a member of the topic owner project
             if (getUserRole(topicOwnerProjectId, userName) != null) {
                 return true;
