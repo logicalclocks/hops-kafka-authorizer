@@ -39,6 +39,7 @@ public class DbConnection {
 
         String projectName = null;
         String projectId = null;
+        System.out.println("getProjectName.topicName:"+topicName);
         try {
             prepStatements = conn.prepareStatement("SELECT project_id from topic_acls where topic_name =?");
             prepStatements.setString(1, topicName);
@@ -46,7 +47,7 @@ public class DbConnection {
             while (rst.next()) {
                 projectId = rst.getString("project_id");
             }
-
+            System.out.println("getProjectName.projectId:"+projectId);
             if (projectId == null) {
                 CONNECTIONLOGGGER.log(Level.SEVERE, null,
                         "The speficied project doesn't exist in database");
@@ -60,7 +61,7 @@ public class DbConnection {
             while (rst.next()) {
                 projectName = rst.getString("projectname");
             }
-
+            System.out.println("getProjectName.projectName:"+projectName);
         } catch (SQLException ex) {
             CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
         }
@@ -81,10 +82,12 @@ public class DbConnection {
     }
 
     public String getUserRole(String projectName__userName) {
-
+        
+        System.out.println("getUserRole1.projectName__userName:"+projectName__userName);
+        
         String projectName = projectName__userName.split(TWO_UNDERSCORES)[0];
         String userName = projectName__userName.split(TWO_UNDERSCORES)[1];
-
+        
         String projectId = null;
         try {
             prepStatements = conn.prepareStatement("SELECT * from project where projectname=?");
@@ -93,19 +96,22 @@ public class DbConnection {
             while (rst.next()) {
                 projectId = rst.getString("id");
             }
+            System.out.println("getUserRole1.projectId"+projectId);
             if (projectId == null) {
                 return null;
             }
-
+            
             return getUserRole(projectId, userName);
         } catch (SQLException ex) {
+            System.out.println("getUserRole1 error:"+ex.toString());
             CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
         }
         return null;
     }
 
     public String getUserRole(String projectId, String userName) {
-
+        System.out.println("getUserRole2.projectId:"+projectId);
+        System.out.println("getUserRole2.userName:"+userName);
         String role = null;
         try {
             prepStatements = conn.prepareStatement("SELECT * from users where username=?");
@@ -116,7 +122,7 @@ public class DbConnection {
             while (rst.next()) {
                 email = rst.getString("email");
             }
-
+            System.out.println("getUserRole2.email:"+email);
             prepStatements = conn.prepareStatement("SELECT * from project_team where"
                     + " project_id=? AND team_member=?");
             prepStatements.setString(1, projectId);
@@ -126,6 +132,7 @@ public class DbConnection {
                 role = rst.getString("team_role");
             }
         } catch (SQLException ex) {
+            System.out.println("getUserRole2 error:"+ex.toString());
             return role;
         }
         return role;
@@ -133,7 +140,8 @@ public class DbConnection {
 
     public boolean isPrincipalMemberOfTopicOwnerProject(String topicName,
             String projectName__userName) {
-
+        System.out.println("isPrincipalMemberOfTopicOwnerProject.topic:"+topicName);
+        System.out.println("isPrincipalMemberOfTopicOwnerProject.projectName__userName:"+projectName__userName);
         String userName = projectName__userName.split(TWO_UNDERSCORES)[1];
 
         String topicOwnerProjectId = null;
@@ -146,6 +154,7 @@ public class DbConnection {
                 topicOwnerProjectId = rst.getString("project_id");
 
             }
+            System.out.println("isPrincipalMemberOfTopicOwnerProject.topicOwnerProjectId:"+topicOwnerProjectId);
             if (topicOwnerProjectId == null) {
                 return false;
             }

@@ -71,8 +71,9 @@ public class HopsAclAuthorizer implements Authorizer {
      */
     @Override
     public void configure(java.util.Map<String, ?> configs) {
-
+        System.out.println("configs:"+configs.toString());
         Object obj = configs.get(HopsAclAuthorizer.superUserProp);
+        System.out.println("obj:"+obj);
         String databaseType;
         String databaseUrl;
         String databaseUserName;
@@ -109,9 +110,16 @@ public class HopsAclAuthorizer implements Authorizer {
 
         KafkaPrincipal principal = session.principal();
         String host = session.clientAddress().getHostAddress();
+        System.out.println("authorize :: session:"+session);
+        System.out.println("authorize :: principal.name:"+principal.getName()); 
+        System.out.println("authorize :: principal.name:"+principal.getPrincipalType());
+        System.out.println("authorize :: operation:"+resource);
+        System.out.println("authorize :: host:"+host);
+        System.out.println("authorize :: resource:"+resource);
         String topicName = resource.name();
+        System.out.println("topicName:"+topicName);
         String projectName__userName = principal.getName();
-
+        System.out.println("projectName__userName:"+projectName__userName);
         boolean authorized;
 
         if (resource.resourceType().equals(
@@ -129,18 +137,20 @@ public class HopsAclAuthorizer implements Authorizer {
         }
 
         java.util.Set<HopsAcl> resourceAcls = getTopicAcls(topicName);
+        System.out.println("resourceAcls:"+resourceAcls);
 
         String role = dbConnection.getUserRole(projectName__userName);
 
         //check if there is any Deny acl match that would disallow this operation.
         Boolean denyMatch = aclMatch(operation.name(), projectName__userName,
                 host, DENY, role, resourceAcls);
-
+        System.out.println("denyMatch:"+denyMatch);    
         //if principal is allowed to read or write we allow describe by default,
         //the reverse does not apply to Deny.
         java.util.Set<String> ops = new HashSet<>();
+        
         ops.add(operation.name());
-
+        System.out.println("ops:"+ops);
         if (operation.name().equalsIgnoreCase(DESCRIBE)) {
             ops.add(WRITE);
             ops.add(READ);
@@ -148,12 +158,13 @@ public class HopsAclAuthorizer implements Authorizer {
 
         //now check if there is any allow acl that will allow this operation.
         Boolean allowMatch = false;
+        System.out.println("allowMatch:"+allowMatch);    
         for (String op : ops) {
             if (aclMatch(op, projectName__userName, host, ALLOW, role, resourceAcls)) {
                 allowMatch = true;
             }
         }
-
+         System.out.println("allowMatch:"+allowMatch);    
         /*we allow an operation if a user is a super user or if no acls are
         found and user has configured to allow all users when no acls are found
         or if no deny acls are found and at least one allow acls matches.
@@ -169,14 +180,18 @@ public class HopsAclAuthorizer implements Authorizer {
     private Boolean aclMatch(String operations, String principal,
             String host, String permissionType, String role,
             java.util.Set<HopsAcl> acls) {
-
-        HopsAcl acl;
-        java.util.Iterator<HopsAcl> iter = acls.iterator();
-        for (; iter.hasNext();) {
-            acl = iter.next();
+        System.out.println("Operation:"+operations);
+        System.out.println("principal:"+principal);
+        System.out.println("host:"+host);
+        System.out.println("permissionType:"+permissionType);
+        System.out.println("role:"+role);
+        System.out.println("acls:"+acls);
+        
+        for (HopsAcl acl : acls) {
+            System.out.println("aclMatch.acl"+acl);
             if (acl.getPermissionType().equalsIgnoreCase(permissionType)
                     && (acl.getPrincipal().equalsIgnoreCase(principal) || acl.getPrincipal().equals(WILDCARD))
-                    && (acl.getOperationType().equalsIgnoreCase(operations) || acl.getOperationType().equalsIgnoreCase(ALL))
+                    && (acl.getOperationType().equalsIgnoreCase(operations) || acl.getOperationType().equalsIgnoreCase(WILDCARD))
                     && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(WILDCARD))
                     && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(WILDCARD))) {
                 return true;
@@ -187,7 +202,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
     Boolean isEmptyAclAndAuthorized(java.util.Set<HopsAcl> acls,
             String topicName, String principalName) {
-
+        System.out.println("\n\nisEmptyAclAndAuthorized.acls:"+acls);
         if (acls.isEmpty()) {
             //Authorize if user is member of the toipc owner project
             if (dbConnection.isPrincipalMemberOfTopicOwnerProject(topicName, principalName)) {
@@ -199,7 +214,8 @@ public class HopsAclAuthorizer implements Authorizer {
     }
 
     Boolean isSuperUser(KafkaPrincipal principal) {
-
+        System.out.println("isSuperUser:"+principal);
+        System.out.println("isSuperUser:"+principal);
         if (superUsers.contains(principal)) {
             AUTHORIZERLOGGER.log(Level.INFO,
                     "principal = {0} is a super user, allowing operation without checking acls.",
@@ -269,6 +285,7 @@ public class HopsAclAuthorizer implements Authorizer {
             }
             //get all the acls for the given topic
             ResultSet topicAcls = dbConnection.getTopicAcls(topicName);
+            System.out.println("getTopicAcls.topicAcls:"+topicAcls.toString());
             while (topicAcls.next()) {
                 // principal = projectName + "__" + topicAcls.getString("username");
                 principal = topicAcls.getString(PRINCIPAL);
@@ -276,7 +293,9 @@ public class HopsAclAuthorizer implements Authorizer {
                 operation = topicAcls.getString(OPERATION_TYPE);
                 host = topicAcls.getString(HOST);
                 role = topicAcls.getString(ROLE);
-                resourceAcls.add(new HopsAcl(principal, permission, host, operation, role));
+                HopsAcl acl = new HopsAcl(principal, permission, host, operation, role);
+                System.out.println("acl-1:"+acl);
+                resourceAcls.add(acl);
             }
             //get all the acls for wildcard topics
             ResultSet wildcardTopicAcls = dbConnection.getTopicAcls(WILDCARD);
@@ -287,9 +306,12 @@ public class HopsAclAuthorizer implements Authorizer {
                 operation = topicAcls.getString(OPERATION_TYPE);
                 host = topicAcls.getString(HOST);
                 role = topicAcls.getString(ROLE);
+                HopsAcl acl= new HopsAcl(principal, permission, host, operation, role);
+                System.out.println("acl-2:"+acl);
                 resourceAcls.add(new HopsAcl(principal, permission, host, operation, role));
             }
         } catch (SQLException ex) {
+            System.out.println("getTopicAcls error:"+ex.toString());
             AUTHORIZERLOGGER.log(Level.SEVERE, null, ex.toString());
         }
         return resourceAcls;

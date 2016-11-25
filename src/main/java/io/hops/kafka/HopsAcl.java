@@ -63,4 +63,11 @@ public class HopsAcl {
     public void setRole(String role) {
         this.role = role;
     }
+
+    @Override
+    public String toString() {
+        return "HopsAcl{" + "principal=" + principal + ", permissionType=" + permissionType + ", operationType=" + operationType + ", host=" + host + ", role=" + role + '}';
+    }
+    
+    
 }

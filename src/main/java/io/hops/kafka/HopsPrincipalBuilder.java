@@ -14,6 +14,7 @@ package io.hops.kafka;
 
 import java.util.Map;
 import java.security.Principal;
+import javax.security.auth.x500.X500Principal;
 
 import org.apache.kafka.common.network.TransportLayer;
 import org.apache.kafka.common.network.Authenticator;
@@ -51,22 +52,27 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
             Authenticator authenticator) throws KafkaException {
         try {
             Principal principal = transportLayer.peerPrincipal();
-
-            if (!(principal instanceof KafkaPrincipal)) {
+            System.out.println("principal:"+principal);
+            System.out.println("principal.class:"+principal.getClass().getCanonicalName());
+            if (!((principal instanceof X500Principal) || (principal instanceof KafkaPrincipal))) {
+                System.out.println("Returning principal");
                 return principal;
             }
 
             String TLSUserName = principal.getName();
+            System.out.println("TLSUserName:"+TLSUserName);
             if (TLSUserName.equalsIgnoreCase(ANONYMOUS)) {
                 return principal;
             }
 
             String userType = principal.toString().split(COLON_SEPARATOR)[0];
+            System.out.println("buildPrincipal.userType:"+userType);
             String projetcName__userName = TLSUserName.split(COMMA_SEPARATOR, 6)[0].split(ASSIGN_SEPARATOR)[1];
-
+            System.out.println("buildPrincipal.projetcName__userName:"+projetcName__userName);
             Principal kafkaPrincipal = new KafkaPrincipal(userType, projetcName__userName);
             return kafkaPrincipal;
         } catch (Exception e) {
+            System.out.println("buildPrincipal error:"+e.toString());
             throw new KafkaException("Failed to build Kafka principal due to: ", e);
         }
     }
