@@ -1,3 +1,3 @@
 #!/bin/bash
 
-scp target/KafkaAclAuthorizer-1.0.jar    glassfish@snurran.sics.se:/var/www/hops
+scp target/hops-kafka-authorizer-0.1.jar    glassfish@snurran.sics.se:/var/www/hops

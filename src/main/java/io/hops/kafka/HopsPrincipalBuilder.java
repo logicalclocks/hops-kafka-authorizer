@@ -12,6 +12,7 @@
  */
 package io.hops.kafka;
 
+import java.io.IOException;
 import java.util.Map;
 import java.security.Principal;
 import javax.security.auth.x500.X500Principal;
@@ -23,61 +24,59 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.PrincipalBuilder;
 
 /**
- *
- * @author misdess
+ * Customized Principal Builder for HopsWorks.
+ * <p>
  */
 public class HopsPrincipalBuilder implements PrincipalBuilder {
 
-    public final String COLON_SEPARATOR = ":";
-    
-    public final String COMMA_SEPARATOR = ",";
-    
-    public final String ASSIGN_SEPARATOR = "=";
+  @Override
+  public void configure(Map<String, ?> configs) {
 
-    public final String ANONYMOUS = "ANONYMOUS";
+  }
 
-    @Override
-    public void configure(Map<String, ?> configs) {
+  /*
+   * By default, the TLS user name will be of the form
+   * "CN=host1.example.com,OU=,O=Confluent,L=London,ST=London,C=GB".
+   * This builder class extracts host1.example.com.
+   * In our case it will be, principalType:projectName__userName.
+   */
+  @Override
+  public Principal buildPrincipal(TransportLayer transportLayer,
+          Authenticator authenticator) throws KafkaException {
+    try {
+      Principal principal = transportLayer.peerPrincipal();
+      System.out.println("principal:" + principal);
+      System.out.println("principal.class:" + principal.getClass().
+              getCanonicalName());
+      if (!((principal instanceof X500Principal)
+              || (principal instanceof KafkaPrincipal))) {
+        System.out.println("Returning principal");
+        return principal;
+      }
 
+      String TLSUserName = principal.getName();
+      System.out.println("TLSUserName:" + TLSUserName);
+      if (TLSUserName.equalsIgnoreCase(Consts.ANONYMOUS)) {
+        return principal;
+      }
+
+      String userType = principal.toString().split(Consts.COLON_SEPARATOR)[0];
+      System.out.println("buildPrincipal.userType:" + userType);
+      String projectName__userName = TLSUserName.
+              split(Consts.COMMA_SEPARATOR, 6)[0].
+              split(Consts.ASSIGN_SEPARATOR)[1];
+      System.out.println("buildPrincipal.projetcName__userName:"
+              + projectName__userName);
+      Principal kafkaPrincipal = new KafkaPrincipal(userType,
+              projectName__userName);
+      return kafkaPrincipal;
+    } catch (IOException e) {
+      System.out.println("buildPrincipal error:" + e.toString());
+      throw new KafkaException("Failed to build Kafka principal due to: ", e);
     }
+  }
 
-    /*
-    *By default, the TLS user name will be of the form 
-    * "CN=host1.example.com,OU=,O=Confluent,L=London,ST=London,C=GB".
-    *This builder class extracts host1.example.com.
-    *In our case it will be,  principalType:projectName__userName.
-     */
-    @Override
-    public Principal buildPrincipal(TransportLayer transportLayer,
-            Authenticator authenticator) throws KafkaException {
-        try {
-            Principal principal = transportLayer.peerPrincipal();
-            System.out.println("principal:"+principal);
-            System.out.println("principal.class:"+principal.getClass().getCanonicalName());
-            if (!((principal instanceof X500Principal) || (principal instanceof KafkaPrincipal))) {
-                System.out.println("Returning principal");
-                return principal;
-            }
-
-            String TLSUserName = principal.getName();
-            System.out.println("TLSUserName:"+TLSUserName);
-            if (TLSUserName.equalsIgnoreCase(ANONYMOUS)) {
-                return principal;
-            }
-
-            String userType = principal.toString().split(COLON_SEPARATOR)[0];
-            System.out.println("buildPrincipal.userType:"+userType);
-            String projetcName__userName = TLSUserName.split(COMMA_SEPARATOR, 6)[0].split(ASSIGN_SEPARATOR)[1];
-            System.out.println("buildPrincipal.projetcName__userName:"+projetcName__userName);
-            Principal kafkaPrincipal = new KafkaPrincipal(userType, projetcName__userName);
-            return kafkaPrincipal;
-        } catch (Exception e) {
-            System.out.println("buildPrincipal error:"+e.toString());
-            throw new KafkaException("Failed to build Kafka principal due to: ", e);
-        }
-    }
-
-    @Override
-    public void close() throws KafkaException {
-    }
+  @Override
+  public void close() throws KafkaException {
+  }
 }
