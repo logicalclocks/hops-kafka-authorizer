@@ -113,7 +113,7 @@ public class HopsAclAuthorizer implements Authorizer {
         System.out.println("authorize :: session:"+session);
         System.out.println("authorize :: principal.name:"+principal.getName()); 
         System.out.println("authorize :: principal.name:"+principal.getPrincipalType());
-        System.out.println("authorize :: operation:"+resource);
+        System.out.println("authorize :: operation:"+operation);
         System.out.println("authorize :: host:"+host);
         System.out.println("authorize :: resource:"+resource);
         String topicName = resource.name();
