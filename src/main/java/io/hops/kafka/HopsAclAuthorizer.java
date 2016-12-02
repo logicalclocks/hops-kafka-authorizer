@@ -94,9 +94,15 @@ public class HopsAclAuthorizer implements Authorizer {
 
     if (resource.resourceType().equals(
             kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.CLUSTER))) {
-      AUTHORIZERLOGGER.log(Level.SEVERE,
+      AUTHORIZERLOGGER.log(Level.INFO,
               "This is cluster authorization for broker: {0}",
               new Object[]{projectName__userName});
+      return true;
+    }
+    else if (!resource.resourceType().equals(
+            kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.TOPIC))) {
+      AUTHORIZERLOGGER.log(Level.INFO,
+              "Non topic resource {0}, authorized:"+resource.resourceType().name());
       return true;
     }
 
@@ -271,7 +277,7 @@ public class HopsAclAuthorizer implements Authorizer {
         operation = topicAcls.getString(Consts.OPERATION_TYPE);
         host = topicAcls.getString(Consts.HOST);
         role = topicAcls.getString(Consts.ROLE);
-        HopsAcl acl = new HopsAcl(principal, permission, host, operation, role);
+        HopsAcl acl = new HopsAcl(principal, permission, operation, host, role);
         System.out.println("acl-1:" + acl);
         resourceAcls.add(acl);
       }

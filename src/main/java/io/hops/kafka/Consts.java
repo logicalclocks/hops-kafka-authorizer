@@ -28,7 +28,9 @@ public interface Consts {
   public static final String HOST = "host";
   public static final String ROLE = "role";
 
+  //Resource Types
   public static final String CLUSTER = "Cluster";
+  public static final String TOPIC = "Topic";
   public static final String WILDCARD = "*";
 
   //Properties attributes
