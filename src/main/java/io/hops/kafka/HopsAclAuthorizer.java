@@ -76,7 +76,7 @@ public class HopsAclAuthorizer implements Authorizer {
   @Override
   public boolean authorize(RequestChannel.Session session, Operation operation,
           Resource resource) {
-
+   
     KafkaPrincipal principal = session.principal();
     String host = session.clientAddress().getHostAddress();
     System.out.println("authorize :: session:" + session);
@@ -87,9 +87,21 @@ public class HopsAclAuthorizer implements Authorizer {
     System.out.println("authorize :: host:" + host);
     System.out.println("authorize :: resource:" + resource);
     String topicName = resource.name();
-    System.out.println("topicName:" + topicName);
+    System.out.println("authorize :: topicName:" + topicName);
     String projectName__userName = principal.getName();
-    System.out.println("projectName__userName:" + projectName__userName);
+    System.out.println("authorize :: projectName__userName:"
+            + projectName__userName);
+
+    if (projectName__userName.equalsIgnoreCase(Consts.ANONYMOUS)) {
+      AUTHORIZERLOGGER.log(Level.SEVERE,
+              "No Acl found for cluster authorization, user: {0}",
+              new Object[]{projectName__userName});
+      return false;
+    }
+    
+    if (isSuperUser(principal)) {
+      return true;
+    }
     boolean authorized;
 
     if (resource.resourceType().equals(
@@ -97,21 +109,16 @@ public class HopsAclAuthorizer implements Authorizer {
       AUTHORIZERLOGGER.log(Level.INFO,
               "This is cluster authorization for broker: {0}",
               new Object[]{projectName__userName});
-      return true;
-    }
-    else if (!resource.resourceType().equals(
-            kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.TOPIC))) {
+      return false;
+    } 
+    if (resource.resourceType().equals(
+            kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.GROUP))) {
       AUTHORIZERLOGGER.log(Level.INFO,
-              "Non topic resource {0}, authorized:"+resource.resourceType().name());
-      return true;
-    }
-
-    if (projectName__userName.equalsIgnoreCase(Consts.ANONYMOUS)) {
-      AUTHORIZERLOGGER.log(Level.SEVERE,
-              "No Acl found for cluster authorization, user: {0}",
+              "This is group authorization for: {0}",
               new Object[]{projectName__userName});
       return true;
-    }
+    } 
+    
 
     java.util.Set<HopsAcl> resourceAcls = getTopicAcls(topicName);
     System.out.println("resourceAcls:" + resourceAcls);
@@ -122,7 +129,7 @@ public class HopsAclAuthorizer implements Authorizer {
     boolean denyMatch = aclMatch(operation.name(), projectName__userName,
             host, Consts.DENY, role, resourceAcls);
     System.out.println("denyMatch:" + denyMatch);
-    
+
     //if principal is allowed to read or write we allow describe by default,
     //the reverse does not apply to Deny.
     java.util.Set<String> ops = new HashSet<>();
@@ -197,10 +204,11 @@ public class HopsAclAuthorizer implements Authorizer {
     return false;
   }
 
-  Boolean isSuperUser(KafkaPrincipal principal) {
-    System.out.println("isSuperUser:" + principal);
+  boolean isSuperUser(KafkaPrincipal principal) {
     System.out.println("isSuperUser:" + principal);
     if (superUsers.contains(principal)) {
+      System.out.println("isSuperUser:" + "principal = " + principal
+              + " is a super user, allowing operation without checking acls.");
       AUTHORIZERLOGGER.log(Level.INFO,
               "principal = {0} is a super user, allowing operation without checking acls.",
               new Object[]{principal});
