@@ -155,7 +155,7 @@ public class DbConnection {
     String topicOwnerProjectId = null;
     try {
       prepStatements = conn.prepareStatement(
-              "SELECT * from project_topics where topicName=?");
+              "SELECT * from project_topics where topic_name=?");
       prepStatements.setString(1, topicName);
 
       ResultSet rst = prepStatements.executeQuery();
