@@ -15,6 +15,7 @@ import java.util.HashSet;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import joptsimple.internal.Strings;
 
 /**
  *
@@ -113,9 +114,18 @@ public class HopsAclAuthorizer implements Authorizer {
     } 
     if (resource.resourceType().equals(
             kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.GROUP))) {
+      //Check if group starts with project name and CN contains it
+      String projectCN = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[0];
+      String projectConsumerGroup = resource.name().split(Consts.PROJECT_USER_DELIMITER)[0];
+      System.out.println("Consumer group :: projectCN:"+projectCN);
+      System.out.println("Consumer group :: projectConsumerGroup:"+projectConsumerGroup);
+      if(!projectCN.equals(projectConsumerGroup)){
+        AUTHORIZERLOGGER.log(Level.INFO,
+              "Principal:{0} is not allowed to access group {1}", new Object[]{projectName__userName,resource.name()});
+        return false;
+      }
       AUTHORIZERLOGGER.log(Level.INFO,
-              "This is group authorization for: {0}",
-              new Object[]{projectName__userName});
+              "Principal:{0} is allowed to access group {1}", new Object[]{projectName__userName,resource.name()});
       return true;
     } 
     

@@ -10,7 +10,7 @@ public interface Consts {
   public static final String COMMA_SEPARATOR = ",";
   public static final String ASSIGN_SEPARATOR = "=";
   public static final String SEMI_COLON = ";";
-  public final String TWO_UNDERSCORES = "__";
+  public final String PROJECT_USER_DELIMITER = "__";
 
   public static final String ANONYMOUS = "ANONYMOUS";
 

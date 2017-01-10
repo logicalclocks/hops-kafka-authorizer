@@ -90,8 +90,8 @@ public class DbConnection {
     System.out.println("getUserRole1.projectName__userName:"
             + projectName__userName);
 
-    String projectName = projectName__userName.split(Consts.TWO_UNDERSCORES)[0];
-    String userName = projectName__userName.split(Consts.TWO_UNDERSCORES)[1];
+    String projectName = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[0];
+    String userName = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[1];
 
     String projectId = null;
     try {
@@ -150,7 +150,7 @@ public class DbConnection {
     System.out.println("isTopicOwner.topic:" + topicName);
     System.out.println("isTopicOwner.projectName__userName:"
             + projectName__userName);
-    String userName = projectName__userName.split(Consts.TWO_UNDERSCORES)[1];
+    String userName = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[1];
 
     String topicOwnerProjectId = null;
     try {
