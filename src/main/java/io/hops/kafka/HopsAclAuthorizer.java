@@ -12,19 +12,17 @@ import scala.collection.immutable.Set;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashSet;
-
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import joptsimple.internal.Strings;
+import org.apache.log4j.Logger;
 
 /**
  *
- * @author misdess
+ * Authorizer class for HopsWorks Kafka. Authorizer project users by extracting their project specific name from
+ * the SSL/TLS certificate CN field.
+ * <p>
  */
 public class HopsAclAuthorizer implements Authorizer {
 
-  private static final Logger AUTHORIZERLOGGER = Logger.
-          getLogger(HopsAclAuthorizer.class.getName());
+  private static final Logger LOGGER = Logger.getLogger("kafka.authorizer.logger");
   //List of users that will be treated as super users and will have access to 
   //all the resources for all actions from all hosts, defaults to no super users.
   private java.util.Set<KafkaPrincipal> superUsers = new java.util.HashSet<>();
@@ -32,7 +30,6 @@ public class HopsAclAuthorizer implements Authorizer {
   //If set to true when no acls are found for a resource , authorizer allows 
   //access to everyone. Defaults to false.
   private boolean shouldAllowEveryoneIfNoAclIsFound = false;
-
   DbConnection dbConnection;
 
   /**
@@ -42,9 +39,7 @@ public class HopsAclAuthorizer implements Authorizer {
    */
   @Override
   public void configure(java.util.Map<String, ?> configs) {
-    System.out.println("configs:" + configs.toString());
     Object obj = configs.get(Consts.SUPERUSERS_PROP);
-    System.out.println("obj:" + obj);
     String databaseType;
     String databaseUrl;
     String databaseUserName;
@@ -67,84 +62,74 @@ public class HopsAclAuthorizer implements Authorizer {
     databasePassword = configs.get(Consts.DATABASE_PASSWORD).toString();
     //initialize database connection.
     dbConnection = new DbConnection(databaseType, databaseUrl,
-            databaseUserName, databasePassword);
+        databaseUserName, databasePassword);
 
     //grap the default acl property
     shouldAllowEveryoneIfNoAclIsFound = Boolean.valueOf(
-            configs.get(Consts.ALLOW_EVERYONE_IF_NO_ACS_FOUND_PROP).toString());
+        configs.get(Consts.ALLOW_EVERYONE_IF_NO_ACS_FOUND_PROP).toString());
   }
 
   @Override
   public boolean authorize(RequestChannel.Session session, Operation operation,
-          Resource resource) {
-   
+      Resource resource) {
+
     KafkaPrincipal principal = session.principal();
     String host = session.clientAddress().getHostAddress();
-    System.out.println("authorize :: session:" + session);
-    System.out.println("authorize :: principal.name:" + principal.getName());
-    System.out.println("authorize :: principal.type:" + principal.
-            getPrincipalType());
-    System.out.println("authorize :: operation:" + operation);
-    System.out.println("authorize :: host:" + host);
-    System.out.println("authorize :: resource:" + resource);
+    LOGGER.debug("authorize :: session:" + session);
+    LOGGER.debug("authorize :: principal.name:" + principal.getName());
+    LOGGER.debug("authorize :: principal.type:" + principal.
+        getPrincipalType());
+    LOGGER.debug("authorize :: operation:" + operation);
+    LOGGER.debug("authorize :: host:" + host);
+    LOGGER.debug("authorize :: resource:" + resource);
     String topicName = resource.name();
-    System.out.println("authorize :: topicName:" + topicName);
+    LOGGER.debug("authorize :: topicName:" + topicName);
     String projectName__userName = principal.getName();
-    System.out.println("authorize :: projectName__userName:"
-            + projectName__userName);
+    LOGGER.debug("authorize :: projectName__userName:"
+        + projectName__userName);
 
     if (projectName__userName.equalsIgnoreCase(Consts.ANONYMOUS)) {
-      AUTHORIZERLOGGER.log(Level.SEVERE,
-              "No Acl found for cluster authorization, user: {0}",
-              new Object[]{projectName__userName});
+      LOGGER.info("No Acl found for cluster authorization, user:" + projectName__userName);
       return false;
     }
-    
+
     if (isSuperUser(principal)) {
       return true;
     }
     boolean authorized;
 
     if (resource.resourceType().equals(
-            kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.CLUSTER))) {
-      AUTHORIZERLOGGER.log(Level.INFO,
-              "This is cluster authorization for broker: {0}",
-              new Object[]{projectName__userName});
+        kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.CLUSTER))) {
+      LOGGER.info("This is cluster authorization for broker: " + projectName__userName);
       return false;
-    } 
+    }
     if (resource.resourceType().equals(
-            kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.GROUP))) {
+        kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.GROUP))) {
       //Check if group starts with project name and CN contains it
       String projectCN = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[0];
       String projectConsumerGroup = resource.name().split(Consts.PROJECT_USER_DELIMITER)[0];
-      System.out.println("Consumer group :: projectCN:"+projectCN);
-      System.out.println("Consumer group :: projectConsumerGroup:"+projectConsumerGroup);
-      if(!projectCN.equals(projectConsumerGroup)){
-        AUTHORIZERLOGGER.log(Level.INFO,
-              "Principal:{0} is not allowed to access group {1}", new Object[]{projectName__userName,resource.name()});
+      LOGGER.debug("Consumer group :: projectCN:" + projectCN);
+      LOGGER.debug("Consumer group :: projectConsumerGroup:" + projectConsumerGroup);
+      if (!projectCN.equals(projectConsumerGroup)) {
+        LOGGER.info("Principal:" + projectName__userName + " is not allowed to access group:" + resource.
+            name());
         return false;
       }
-      AUTHORIZERLOGGER.log(Level.INFO,
-              "Principal:{0} is allowed to access group {1}", new Object[]{projectName__userName,resource.name()});
+      LOGGER.info("Principal:" + projectName__userName + " is allowed to access group:" + resource.name());
       return true;
-    } 
-    
+    }
 
     java.util.Set<HopsAcl> resourceAcls = getTopicAcls(topicName);
-    System.out.println("resourceAcls:" + resourceAcls);
-
     String role = dbConnection.getUserRole(projectName__userName);
 
     //check if there is any Deny acl match that would disallow this operation.
     boolean denyMatch = aclMatch(operation.name(), projectName__userName,
-            host, Consts.DENY, role, resourceAcls);
-    System.out.println("denyMatch:" + denyMatch);
+        host, Consts.DENY, role, resourceAcls);
 
     //if principal is allowed to read or write we allow describe by default,
     //the reverse does not apply to Deny.
     java.util.Set<String> ops = new HashSet<>();
     ops.add(operation.name());
-    System.out.println("ops:" + ops);
     if (operation.name().equalsIgnoreCase(Consts.DESCRIBE)) {
       ops.add(Consts.WRITE);
       ops.add(Consts.READ);
@@ -154,46 +139,46 @@ public class HopsAclAuthorizer implements Authorizer {
     boolean allowMatch = false;
     for (String op : ops) {
       if (aclMatch(op, projectName__userName, host, Consts.ALLOW, role,
-              resourceAcls)) {
+          resourceAcls)) {
         allowMatch = true;
       }
     }
-    System.out.println("allowMatch:" + allowMatch);
+    LOGGER.info("For principal: " + projectName__userName + ", allowMatch:" + allowMatch);
     /*
      * we allow an operation if a user is a super user or if no acls are
      * found and user has configured to allow all users when no acls are found
      * or if no deny acls are found and at least one allow acls matches.
      */
     authorized = isSuperUser(principal)
-            || isEmptyAclAndAuthorized(resourceAcls, topicName,
-                    projectName__userName)
-            || (!denyMatch && allowMatch);
+        || isEmptyAclAndAuthorized(resourceAcls, topicName,
+            projectName__userName)
+        || (!denyMatch && allowMatch);
 
     //logAuditMessage(principal, authorized, operation, resource, host);
     return authorized;
   }
 
   private Boolean aclMatch(String operations, String principal,
-          String host, String permissionType, String role,
-          java.util.Set<HopsAcl> acls) {
-    System.out.println("aclMatch :: Operation:" + operations);
-    System.out.println("aclMatch :: principal:" + principal);
-    System.out.println("aclMatch :: host:" + host);
-    System.out.println("aclMatch :: permissionType:" + permissionType);
-    System.out.println("aclMatch :: role:" + role);
-    System.out.println("aclMatch :: acls:" + acls);
+      String host, String permissionType, String role,
+      java.util.Set<HopsAcl> acls) {
+    LOGGER.debug("aclMatch :: Operation:" + operations);
+    LOGGER.debug("aclMatch :: principal:" + principal);
+    LOGGER.debug("aclMatch :: host:" + host);
+    LOGGER.debug("aclMatch :: permissionType:" + permissionType);
+    LOGGER.debug("aclMatch :: role:" + role);
+    LOGGER.debug("aclMatch :: acls:" + acls);
 
     for (HopsAcl acl : acls) {
-      System.out.println("aclMatch.acl" + acl);
+      LOGGER.debug("aclMatch.acl" + acl);
       if (acl.getPermissionType().equalsIgnoreCase(permissionType)
-              && (acl.getPrincipal().equalsIgnoreCase(principal) || acl.
-              getPrincipal().equals(Consts.WILDCARD))
-              && (acl.getOperationType().equalsIgnoreCase(operations) || acl.
-              getOperationType().equalsIgnoreCase(Consts.WILDCARD))
-              && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(
-              Consts.WILDCARD))
-              && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(
-              Consts.WILDCARD))) {
+          && (acl.getPrincipal().equalsIgnoreCase(principal) || acl.
+          getPrincipal().equals(Consts.WILDCARD))
+          && (acl.getOperationType().equalsIgnoreCase(operations) || acl.
+          getOperationType().equalsIgnoreCase(Consts.WILDCARD))
+          && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(
+          Consts.WILDCARD))
+          && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(
+          Consts.WILDCARD))) {
         return true;
       }
     }
@@ -201,12 +186,11 @@ public class HopsAclAuthorizer implements Authorizer {
   }
 
   Boolean isEmptyAclAndAuthorized(java.util.Set<HopsAcl> acls,
-          String topicName, String principalName) {
-    System.out.println("\n\nisEmptyAclAndAuthorized.acls:" + acls);
+      String topicName, String principalName) {
     if (acls.isEmpty()) {
       //Authorize if user is member of the topic owner project
       if (dbConnection.isTopicOwner(topicName,
-              principalName)) {
+          principalName)) {
         return true;
       }
       return shouldAllowEveryoneIfNoAclIsFound;
@@ -215,15 +199,13 @@ public class HopsAclAuthorizer implements Authorizer {
   }
 
   boolean isSuperUser(KafkaPrincipal principal) {
-    System.out.println("isSuperUser:" + principal);
     if (superUsers.contains(principal)) {
       System.out.println("isSuperUser:" + "principal = " + principal
-              + " is a super user, allowing operation without checking acls.");
-      AUTHORIZERLOGGER.log(Level.INFO,
-              "principal = {0} is a super user, allowing operation without checking acls.",
-              new Object[]{principal});
+          + " is a super user, allowing operation without checking acls.");
+      LOGGER.debug("principal = " + principal + " is a super user, allowing operation without checking acls.");
       return true;
     }
+    LOGGER.debug("principal = " + principal + " is not a super user, allowing operation without checking acls.");
     return false;
   }
 
@@ -252,7 +234,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
     //not used in this authorizer
     scala.collection.immutable.Map<Resource, Set<Acl>> immutablePrincipalAcls
-            = new scala.collection.immutable.HashMap<>();
+        = new scala.collection.immutable.HashMap<>();
     return immutablePrincipalAcls;
   }
 
@@ -261,7 +243,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
     //not used in this authorizer
     scala.collection.immutable.Map<Resource, Set<Acl>> aclCache
-            = new scala.collection.immutable.HashMap<>();
+        = new scala.collection.immutable.HashMap<>();
     return aclCache;
   }
 
@@ -311,11 +293,11 @@ public class HopsAclAuthorizer implements Authorizer {
         HopsAcl acl = new HopsAcl(principal, permission, host, operation, role);
         System.out.println("acl-2:" + acl);
         resourceAcls.add(new HopsAcl(principal, permission, host, operation,
-                role));
+            role));
       }
     } catch (SQLException ex) {
       System.out.println("getTopicAcls error:" + ex.toString());
-      AUTHORIZERLOGGER.log(Level.SEVERE, null, ex.toString());
+      LOGGER.error(ex.toString());
     }
     return resourceAcls;
   }

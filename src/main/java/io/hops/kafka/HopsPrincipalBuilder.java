@@ -42,36 +42,28 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
    */
   @Override
   public Principal buildPrincipal(TransportLayer transportLayer,
-          Authenticator authenticator) throws KafkaException {
+      Authenticator authenticator) throws KafkaException {
     try {
       Principal principal = transportLayer.peerPrincipal();
-      System.out.println("principal:" + principal);
-      System.out.println("principal.class:" + principal.getClass().
-              getCanonicalName());
+
       if (!((principal instanceof X500Principal)
-              || (principal instanceof KafkaPrincipal))) {
-        System.out.println("Returning principal");
+          || (principal instanceof KafkaPrincipal))) {
         return principal;
       }
 
       String TLSUserName = principal.getName();
-      System.out.println("TLSUserName:" + TLSUserName);
       if (TLSUserName.equalsIgnoreCase(Consts.ANONYMOUS)) {
         return principal;
       }
 
       String userType = principal.toString().split(Consts.COLON_SEPARATOR)[0];
-      System.out.println("buildPrincipal.userType:" + userType);
       String projectName__userName = TLSUserName.
-              split(Consts.COMMA_SEPARATOR, 6)[0].
-              split(Consts.ASSIGN_SEPARATOR)[1];
-      System.out.println("buildPrincipal.projetcName__userName:"
-              + projectName__userName);
+          split(Consts.COMMA_SEPARATOR, 6)[0].
+          split(Consts.ASSIGN_SEPARATOR)[1];
       Principal kafkaPrincipal = new KafkaPrincipal(userType,
-              projectName__userName);
+          projectName__userName);
       return kafkaPrincipal;
     } catch (IOException e) {
-      System.out.println("buildPrincipal error:" + e.toString());
       throw new KafkaException("Failed to build Kafka principal due to: ", e);
     }
   }

@@ -1,8 +1,7 @@
 package io.hops.kafka;
 
 import java.sql.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import org.apache.log4j.Logger;
 
 /**
  * Class providing database connectivity to HopsWorks Kafka Authorizer.
@@ -10,63 +9,56 @@ import java.util.logging.Logger;
  */
 public class DbConnection {
 
-  private static final Logger CONNECTIONLOGGGER = Logger.
-          getLogger(DbConnection.class.getName());
+  private static final Logger LOGGER = Logger.
+      getLogger(DbConnection.class.getName());
 
   private Connection conn;
   private PreparedStatement prepStatements;
 
   public DbConnection(String dbType, String dbUrl, String dbUserName,
-          String dbPassword) {
+      String dbPassword) {
 
-    CONNECTIONLOGGGER.log(Level.INFO, "testing database connection to: {0}",
-            new Object[]{dbUrl});
+    LOGGER.info("testing database connection to: {0}");
 
     try {
       if (dbType.equalsIgnoreCase("mysql")) {
         Class.forName("com.mysql.jdbc.Driver");
         conn = DriverManager.getConnection("jdbc:mysql://" + dbUrl, dbUserName,
-                dbPassword);
-        CONNECTIONLOGGGER.
-                log(Level.INFO, "connection made successfully to: {0}",
-                        new Object[]{dbUrl});
+            dbPassword);
+        LOGGER.info("connection made successfully to:" + dbUrl);
       }
 
     } catch (SQLException | ClassNotFoundException ex) {
-      CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
+      LOGGER.error(ex.toString(), ex);
     }
   }
 
-  public String getProjectName(String topicName) {
+  public String getProjectName(String topic) {
 
     String projectName = null;
     String projectId = null;
-    System.out.println("getProjectName.topicName:" + topicName);
     try {
       prepStatements = conn.prepareStatement(
-              "SELECT project_id from topic_acls where topic_name =?");
-      prepStatements.setString(1, topicName);
+          "SELECT project_id from topic_acls where topic_name =?");
+      prepStatements.setString(1, topic);
       ResultSet rst = prepStatements.executeQuery();
       while (rst.next()) {
         projectId = rst.getString("project_id");
       }
-      System.out.println("getProjectName.projectId:" + projectId);
       if (projectId == null) {
-        CONNECTIONLOGGGER.log(Level.SEVERE, null,
-                "The speficied project doesn't exist in database");
+        LOGGER.debug("The speficied project doesn't exist in database for topic:" + topic);
         return null;
       }
       prepStatements = conn.prepareStatement(
-              "SELECT id, projectname from project where id =?");
+          "SELECT id, projectname from project where id =?");
       prepStatements.setString(1, projectId);
 
       rst = prepStatements.executeQuery();
       while (rst.next()) {
         projectName = rst.getString("projectname");
       }
-      System.out.println("getProjectName.projectName:" + projectName);
     } catch (SQLException ex) {
-      CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
+      LOGGER.error(ex.toString(), ex);
     }
     return projectName;
   }
@@ -76,19 +68,16 @@ public class DbConnection {
     ResultSet result = null;
     try {
       prepStatements = conn.prepareStatement(
-              "SELECT * from topic_acls where topic_name =?");
+          "SELECT * from topic_acls where topic_name =?");
       prepStatements.setString(1, topicName);
       result = prepStatements.executeQuery();
     } catch (SQLException ex) {
-      CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
+      LOGGER.error(ex.toString(), ex);
     }
     return result;
   }
 
   public String getUserRole(String projectName__userName) {
-
-    System.out.println("getUserRole1.projectName__userName:"
-            + projectName__userName);
 
     String projectName = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[0];
     String userName = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[1];
@@ -96,32 +85,28 @@ public class DbConnection {
     String projectId = null;
     try {
       prepStatements = conn.prepareStatement(
-              "SELECT * from project where projectname=?");
+          "SELECT * from project where projectname=?");
       prepStatements.setString(1, projectName);
       ResultSet rst = prepStatements.executeQuery();
       while (rst.next()) {
         projectId = rst.getString("id");
       }
-      System.out.println("getUserRole1.projectId" + projectId);
       if (projectId == null) {
         return null;
       }
 
       return getUserRole(projectId, userName);
     } catch (SQLException ex) {
-      System.out.println("getUserRole1 error:" + ex.toString());
-      CONNECTIONLOGGGER.log(Level.SEVERE, null, ex.toString());
+      LOGGER.error(ex.toString(), ex);
     }
     return null;
   }
 
   public String getUserRole(String projectId, String userName) {
-    System.out.println("getUserRole2.projectId:" + projectId);
-    System.out.println("getUserRole2.userName:" + userName);
     String role = null;
     try {
       prepStatements = conn.prepareStatement(
-              "SELECT * from users where username=?");
+          "SELECT * from users where username=?");
       prepStatements.setString(1, userName);
 
       ResultSet rst = prepStatements.executeQuery();
@@ -129,9 +114,8 @@ public class DbConnection {
       while (rst.next()) {
         email = rst.getString("email");
       }
-      System.out.println("getUserRole2.email:" + email);
       prepStatements = conn.prepareStatement("SELECT * from project_team where"
-              + " project_id=? AND team_member=?");
+          + " project_id=? AND team_member=?");
       prepStatements.setString(1, projectId);
       prepStatements.setString(2, email);
       rst = prepStatements.executeQuery();
@@ -139,42 +123,36 @@ public class DbConnection {
         role = rst.getString("team_role");
       }
     } catch (SQLException ex) {
-      System.out.println("getUserRole2 error:" + ex.toString());
+      LOGGER.error(ex.toString(), ex);
       return role;
     }
     return role;
   }
 
   public boolean isTopicOwner(String topicName,
-          String projectName__userName) {
-    System.out.println("isTopicOwner.topic:" + topicName);
-    System.out.println("isTopicOwner.projectName__userName:"
-            + projectName__userName);
+      String projectName__userName) {
     String userName = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[1];
 
     String topicOwnerProjectId = null;
     try {
       prepStatements = conn.prepareStatement(
-              "SELECT * from project_topics where topic_name=?");
+          "SELECT * from project_topics where topic_name=?");
       prepStatements.setString(1, topicName);
 
       ResultSet rst = prepStatements.executeQuery();
       while (rst.next()) {
         topicOwnerProjectId = rst.getString("project_id");
       }
-      System.out.println("isTopicOwner.topicOwnerProjectId:"
-              + topicOwnerProjectId);
       if (topicOwnerProjectId == null) {
 
         return false;
       }
       //if the user has a role, then it is a member of the topic owner project
       if (getUserRole(topicOwnerProjectId, userName) != null) {
-        System.out.println("isTopicOwner.getUserRole is not null");
         return true;
       }
     } catch (SQLException ex) {
-      System.out.println("isTopicOwner error:" + ex.toString());
+      LOGGER.error(ex.toString(), ex);
       return false;
     }
 
