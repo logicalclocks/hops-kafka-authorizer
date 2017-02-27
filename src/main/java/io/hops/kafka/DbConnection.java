@@ -1,6 +1,7 @@
 package io.hops.kafka;
 
 import java.sql.*;
+import java.util.logging.Level;
 import org.apache.log4j.Logger;
 
 /**
@@ -157,5 +158,15 @@ public class DbConnection {
     }
 
     return false;
+  }
+  
+  public void close() {
+    try {
+      if(conn != null && !conn.isClosed()){
+        conn.close();
+      }
+    } catch (SQLException ex) {
+      LOGGER.error("Could not close authorizer connection to database", ex);
+    }
   }
 }

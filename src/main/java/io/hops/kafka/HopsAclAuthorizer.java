@@ -170,15 +170,11 @@ public class HopsAclAuthorizer implements Authorizer {
 
     for (HopsAcl acl : acls) {
       LOGGER.debug("aclMatch.acl" + acl);
-      if (acl.getPermissionType().equalsIgnoreCase(permissionType)
-          && (acl.getPrincipal().equalsIgnoreCase(principal) || acl.
-          getPrincipal().equals(Consts.WILDCARD))
-          && (acl.getOperationType().equalsIgnoreCase(operations) || acl.
+      if (acl.getPermissionType().equalsIgnoreCase(permissionType) && (acl.getPrincipal().equalsIgnoreCase(principal)
+          || acl.getPrincipal().equals(Consts.WILDCARD)) && (acl.getOperationType().equalsIgnoreCase(operations) || acl.
           getOperationType().equalsIgnoreCase(Consts.WILDCARD))
-          && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(
-          Consts.WILDCARD))
-          && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(
-          Consts.WILDCARD))) {
+          && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(Consts.WILDCARD)) && (acl.getRole().
+          equalsIgnoreCase(role) || acl.getRole().equals(Consts.WILDCARD))) {
         return true;
       }
     }
@@ -205,7 +201,7 @@ public class HopsAclAuthorizer implements Authorizer {
       LOGGER.debug("principal = " + principal + " is a super user, allowing operation without checking acls.");
       return true;
     }
-    LOGGER.debug("principal = " + principal + " is not a super user, allowing operation without checking acls.");
+    LOGGER.debug("principal = " + principal + " is not a super user.");
     return false;
   }
 
@@ -249,7 +245,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
   @Override
   public void close() {
-    dbConnection = null;
+    dbConnection.close();
   }
 
   private java.util.Set<HopsAcl> getTopicAcls(String topicName) {
