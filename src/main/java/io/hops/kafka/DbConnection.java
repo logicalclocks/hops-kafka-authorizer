@@ -79,9 +79,10 @@ public class DbConnection {
         try (PreparedStatement prepStatement = conn.prepareStatement("SELECT id, projectname from project where id =?")) {
           prepStatement.setString(1, projectId);
           try (ResultSet rst = prepStatement.executeQuery()) {
-            rst.next();
-            projectName = rst.getString("projectname");
-            return projectName;
+            while (rst.next()) {
+              projectName = rst.getString("projectname");
+              return projectName;
+            }
           }
         }
       }
@@ -101,7 +102,7 @@ public class DbConnection {
           "SELECT * from topic_acls where topic_name =?")) {
         prepStatement.setString(1, topicName);
         try (ResultSet rst = prepStatement.executeQuery()) {
-          if (rst != null && rst.next()) {
+          while (rst.next()) {
             HopsAcl acl = new HopsAcl(rst.getString(Consts.PRINCIPAL), rst.getString(Consts.PERMISSION_TYPE),
                 rst.getString(Consts.OPERATION_TYPE), rst.getString(Consts.HOST), rst.getString(Consts.ROLE));
             return acl;
@@ -125,7 +126,7 @@ public class DbConnection {
       try (PreparedStatement prepStatement = conn.prepareStatement("SELECT * from project where projectname=?")) {
         prepStatement.setString(1, projectName);
         try (ResultSet rst = prepStatement.executeQuery()) {
-          if (rst != null && rst.next()) {
+          while (rst.next()) {
             String projectId = rst.getString("id");
             if (projectId != null) {
               return getUserRole(projectId, userName);
@@ -150,7 +151,7 @@ public class DbConnection {
       try (PreparedStatement prepStatement = conn.prepareStatement("SELECT * from users where username=?")) {
         prepStatement.setString(1, userName);
         try (ResultSet rst = prepStatement.executeQuery()) {
-          if (rst != null && rst.next()) {
+          while (rst.next()) {
             email = rst.getString("email");
           }
         }
@@ -186,7 +187,7 @@ public class DbConnection {
           "SELECT * from project_topics where topic_name=?")) {
         prepStatement.setString(1, topicName);
         try (ResultSet rst = prepStatement.executeQuery()) {
-          if (rst != null && rst.next()) {
+          while (rst.next()) {
             String topicOwnerProjectId = rst.getString("project_id");
             //if the user has a role, then it is a member of the topic owner project
             if (getUserRole(topicOwnerProjectId, userName) != null) {
