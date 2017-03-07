@@ -158,17 +158,18 @@ public class HopsAclAuthorizer implements Authorizer {
         allowMatch = true;
       }
     }
-    LOG.info("For principal: " + projectName__userName + ", allowMatch:" + allowMatch);
+    
+    LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
+        + ", allowMatch:" + allowMatch);
     try {
       /*
        * we allow an operation if a user is a super user or if no acls are
        * found and user has configured to allow all users when no acls are found
        * or if no deny acls are found and at least one allow acls matches.
        */
-      authorized = isSuperUser(principal)
-          || isEmptyAclAndAuthorized(resourceAcls, topicName,
-              projectName__userName)
-          || (!denyMatch && allowMatch);
+      authorized = isSuperUser(principal) || 
+          isEmptyAclAndAuthorized(resourceAcls, topicName,projectName__userName) || 
+          (!denyMatch && allowMatch);
     } catch (SQLException ex) {
       LOG.error("Could not get topic owner from database", ex);
       return false;
@@ -190,11 +191,11 @@ public class HopsAclAuthorizer implements Authorizer {
 
     for (HopsAcl acl : acls) {
       LOG.debug("aclMatch.acl" + acl);
-      if (acl.getPermissionType().equalsIgnoreCase(permissionType) && (acl.getPrincipal().equalsIgnoreCase(principal)
-          || acl.getPrincipal().equals(Consts.WILDCARD)) && (acl.getOperationType().equalsIgnoreCase(operations) || acl.
-          getOperationType().equalsIgnoreCase(Consts.WILDCARD))
-          && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(Consts.WILDCARD)) && (acl.getRole().
-          equalsIgnoreCase(role) || acl.getRole().equals(Consts.WILDCARD))) {
+      if (acl.getPermissionType().equalsIgnoreCase(permissionType) && 
+          (acl.getPrincipal().equalsIgnoreCase(principal) || acl.getPrincipal().equals(Consts.WILDCARD)) && 
+          (acl.getOperationType().equalsIgnoreCase(operations) || acl.getOperationType().equalsIgnoreCase(Consts.WILDCARD)) && 
+          (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(Consts.WILDCARD)) && 
+          (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(Consts.WILDCARD))) {
         return true;
       }
     }
@@ -275,16 +276,21 @@ public class HopsAclAuthorizer implements Authorizer {
     java.util.Set<HopsAcl> resourceAcls = new java.util.HashSet<>();
     HopsAcl topicAcls;
     String projectName = dbConnection.getProjectName(topicName);
+    LOG.debug("getTopicAcls :: projectName" + projectName);
     if (projectName == null) {
       return resourceAcls;
     }
     //get all the acls for the given topic
     topicAcls = dbConnection.getTopicAcls(topicName);
-    resourceAcls.add(topicAcls);
+    LOG.debug("getTopicAcls :: topicAcls" + topicAcls);
+    if (topicAcls != null) {
+      resourceAcls.add(topicAcls);
+    }
     //get all the acls for wildcard topics
     HopsAcl wildcardTopicAcls = dbConnection.getTopicAcls(Consts.WILDCARD);
-    resourceAcls.add(wildcardTopicAcls);
-
+    if (wildcardTopicAcls != null) {
+      resourceAcls.add(wildcardTopicAcls);
+    }
     return resourceAcls;
   }
 
