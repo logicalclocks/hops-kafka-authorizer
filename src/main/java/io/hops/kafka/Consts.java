@@ -36,13 +36,15 @@ public interface Consts {
 
   //Properties attributes
   public static final String SUPERUSERS_PROP = "super.users";
-  public static final String ALLOW_EVERYONE_IF_NO_ACS_FOUND_PROP
-          = "allow.everyone.if.no.acl.found";
+  public static final String ALLOW_EVERYONE_IF_NO_ACS_FOUND_PROP = "allow.everyone.if.no.acl.found";
 
   //Database property names
   public final String DATABASE_TYPE = "database.type";
   public final String DATABASE_URL = "database.url";
   public final String DATABASE_USERNAME = "database.username";
   public final String DATABASE_PASSWORD = "database.password";
-
+  public final String DATABASE_CACHE_PREPSTMTS = "database.pool.prepstmt.cache.enabled";
+  public final String DATABASE_PREPSTMT_CACHE_SIZE = "database.pool.prepstmt.cache.size";
+  public final String DATABASE_PREPSTMT_CACHE_SQL_LIMIT = "database.pool.prepstmt.cache.sql.limit";
+  public final String DATABASE_MAX_POOL_SIZE = "database.pool.size";
 }

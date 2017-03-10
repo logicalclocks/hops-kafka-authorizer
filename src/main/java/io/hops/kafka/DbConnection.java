@@ -4,8 +4,6 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.sql.*;
 import org.apache.log4j.Logger;
-//import org.apache.tomcat.jdbc.pool.DataSource;
-//import org.apache.tomcat.jdbc.pool.PoolProperties;
 
 /**
  * Class providing database connectivity to HopsWorks Kafka Authorizer.
@@ -15,44 +13,19 @@ public class DbConnection {
 
   private static final Logger LOG = Logger.getLogger(DbConnection.class.getName());
 
-//  DataSource datasource = new DataSource();
   HikariDataSource datasource = null;
 
-  public DbConnection(String dbType, String dbUrl, String dbUserName, String dbPassword) throws SQLException {
-    LOG.info("testing database connection to: {0}");
-
-//    PoolProperties p = new PoolProperties();
-//    p.setUrl("jdbc:mysql://" + dbUrl);
-//    p.setDriverClassName("com.mysql.jdbc.Driver");
-//    p.setUsername(dbUserName);
-//    p.setPassword(dbPassword);
-//    p.setJmxEnabled(true);
-//    p.setTestWhileIdle(false);
-//    p.setTestOnBorrow(true);
-//    p.setValidationQuery("SELECT 1");
-//    p.setTestOnReturn(false);
-//    p.setValidationInterval(30000);
-//    p.setTimeBetweenEvictionRunsMillis(30000);
-//    p.setMaxActive(20);
-//    p.setInitialSize(2);
-//    p.setMaxWait(10000);
-//    //Timout connection after 3 hours. NDB invalidates connection after 8 hours.
-//    p.setRemoveAbandonedTimeout(3600 * 3);
-//    p.setMinEvictableIdleTimeMillis(30000);
-//    p.setMinIdle(10);
-//    p.setLogAbandoned(true);
-//    p.setRemoveAbandoned(true);
-//    p.setJdbcInterceptors("org.apache.tomcat.jdbc.pool.interceptor.ConnectionState;"
-//        + "org.apache.tomcat.jdbc.pool.interceptor.StatementFinalizer");
-//    datasource.setPoolProperties(p);
+  public DbConnection(String dbType, String dbUrl, String dbUserName, String dbPassword, int maximumPoolSize,
+      String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit) throws SQLException {
+    LOG.info("Initializing database pool to:" + dbUrl);
     HikariConfig config = new HikariConfig();
     config.setJdbcUrl("jdbc:mysql://" + dbUrl);
     config.setUsername(dbUserName);
     config.setPassword(dbPassword);
-    config.addDataSourceProperty("cachePrepStmts", "true");
-    config.addDataSourceProperty("prepStmtCacheSize", "250");
-    config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
-    config.addDataSourceProperty("maximumPoolSize", 30);
+    config.addDataSourceProperty("cachePrepStmts", cachePrepStmts);
+    config.addDataSourceProperty("prepStmtCacheSize", prepStmtCacheSize);
+    config.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
+    config.addDataSourceProperty("maximumPoolSize", maximumPoolSize);
     datasource = new HikariDataSource(config);
     LOG.info("connection made successfully to:" + dbUrl);
   }
@@ -123,7 +96,7 @@ public class DbConnection {
     String projectName = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[0];
     String userName = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[1];
     try (Connection conn = datasource.getConnection()) {
-      try (PreparedStatement prepStatement = conn.prepareStatement("SELECT * from project where projectname=?")) {
+      try (PreparedStatement prepStatement = conn.prepareStatement("SELECT id from project where projectname=?")) {
         prepStatement.setString(1, projectName);
         try (ResultSet rst = prepStatement.executeQuery()) {
           while (rst.next()) {
@@ -148,7 +121,7 @@ public class DbConnection {
   public String getUserRole(String projectId, String userName) throws SQLException {
     String email = null;
     try (Connection conn = datasource.getConnection()) {
-      try (PreparedStatement prepStatement = conn.prepareStatement("SELECT * from users where username=?")) {
+      try (PreparedStatement prepStatement = conn.prepareStatement("SELECT email from users where username=?")) {
         prepStatement.setString(1, userName);
         try (ResultSet rst = prepStatement.executeQuery()) {
           while (rst.next()) {
@@ -158,7 +131,7 @@ public class DbConnection {
       }
       if (email != null) {
         try (PreparedStatement prepStatement = conn.prepareStatement(
-            "SELECT * from project_team where project_id=? AND team_member=?")) {
+            "SELECT team_role from project_team where project_id=? AND team_member=?")) {
           prepStatement.setString(1, projectId);
           prepStatement.setString(2, email);
           try (ResultSet rst = prepStatement.executeQuery()) {
@@ -184,7 +157,7 @@ public class DbConnection {
     String userName = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[1];
     try (Connection conn = datasource.getConnection()) {
       try (PreparedStatement prepStatement = conn.prepareStatement(
-          "SELECT * from project_topics where topic_name=?")) {
+          "SELECT project_id from project_topics where topic_name=?")) {
         prepStatement.setString(1, topicName);
         try (ResultSet rst = prepStatement.executeQuery()) {
           while (rst.next()) {

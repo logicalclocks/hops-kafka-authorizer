@@ -39,10 +39,6 @@ public class HopsAclAuthorizer implements Authorizer {
   @Override
   public void configure(java.util.Map<String, ?> configs) {
     Object obj = configs.get(Consts.SUPERUSERS_PROP);
-    String databaseType;
-    String databaseUrl;
-    String databaseUserName;
-    String databasePassword;
 
     if (obj != null) {
       String superUsersStr = (String) obj;
@@ -55,16 +51,20 @@ public class HopsAclAuthorizer implements Authorizer {
       superUsers = new HashSet<>();
     }
 
-    databaseType = configs.get(Consts.DATABASE_TYPE).toString();
-    databaseUrl = configs.get(Consts.DATABASE_URL).toString();
-    databaseUserName = configs.get(Consts.DATABASE_USERNAME).toString();
-    databasePassword = configs.get(Consts.DATABASE_PASSWORD).toString();
     try {
       //initialize database connection.
-      dbConnection = new DbConnection(databaseType, databaseUrl, databaseUserName, databasePassword);
+      dbConnection = new DbConnection(
+          configs.get(Consts.DATABASE_TYPE).toString(),
+          configs.get(Consts.DATABASE_URL).toString(),
+          configs.get(Consts.DATABASE_USERNAME).toString(),
+          configs.get(Consts.DATABASE_PASSWORD).toString(),
+          Integer.parseInt(configs.get(Consts.DATABASE_MAX_POOL_SIZE).toString()),
+          configs.get(Consts.DATABASE_CACHE_PREPSTMTS).toString(),
+          configs.get(Consts.DATABASE_PREPSTMT_CACHE_SIZE).toString(),
+          configs.get(Consts.DATABASE_PREPSTMT_CACHE_SQL_LIMIT).toString()
+      );
     } catch (SQLException ex) {
-      LOG.error("HopsAclAuthorizer could not connect to database at:" + databaseUrl, ex);
-
+      LOG.error("HopsAclAuthorizer could not connect to database at:" + configs.get(Consts.DATABASE_URL).toString(), ex);
     }
 
     //grap the default acl property
@@ -158,7 +158,7 @@ public class HopsAclAuthorizer implements Authorizer {
         allowMatch = true;
       }
     }
-    
+
     LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
         + ", allowMatch:" + allowMatch);
     try {
@@ -167,9 +167,8 @@ public class HopsAclAuthorizer implements Authorizer {
        * found and user has configured to allow all users when no acls are found
        * or if no deny acls are found and at least one allow acls matches.
        */
-      authorized = isSuperUser(principal) || 
-          isEmptyAclAndAuthorized(resourceAcls, topicName,projectName__userName) || 
-          (!denyMatch && allowMatch);
+      authorized = isSuperUser(principal) || isEmptyAclAndAuthorized(resourceAcls, topicName, projectName__userName)
+          || (!denyMatch && allowMatch);
     } catch (SQLException ex) {
       LOG.error("Could not get topic owner from database", ex);
       return false;
@@ -191,11 +190,11 @@ public class HopsAclAuthorizer implements Authorizer {
 
     for (HopsAcl acl : acls) {
       LOG.debug("aclMatch.acl" + acl);
-      if (acl.getPermissionType().equalsIgnoreCase(permissionType) && 
-          (acl.getPrincipal().equalsIgnoreCase(principal) || acl.getPrincipal().equals(Consts.WILDCARD)) && 
-          (acl.getOperationType().equalsIgnoreCase(operations) || acl.getOperationType().equalsIgnoreCase(Consts.WILDCARD)) && 
-          (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(Consts.WILDCARD)) && 
-          (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(Consts.WILDCARD))) {
+      if (acl.getPermissionType().equalsIgnoreCase(permissionType) && (acl.getPrincipal().equalsIgnoreCase(principal)
+          || acl.getPrincipal().equals(Consts.WILDCARD)) && (acl.getOperationType().equalsIgnoreCase(operations) || acl.
+          getOperationType().equalsIgnoreCase(Consts.WILDCARD)) && (acl.getHost().equalsIgnoreCase(host) || acl.
+          getHost().equals(Consts.WILDCARD)) && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(
+          Consts.WILDCARD))) {
         return true;
       }
     }
