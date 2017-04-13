@@ -108,15 +108,17 @@ public class HopsAclAuthorizer implements Authorizer {
     }
     if (resource.resourceType().equals(
         kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.GROUP))) {
-      //Check if group starts with project name and CN contains it
+      //Check if group requested starts with projectname__ and is equal to the current users project
       String projectCN = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[0];
-      String projectConsumerGroup = resource.name().split(Consts.PROJECT_USER_DELIMITER)[0];
-      LOG.debug("Consumer group :: projectCN:" + projectCN);
-      LOG.debug("Consumer group :: projectConsumerGroup:" + projectConsumerGroup);
-      if (!projectCN.equals(projectConsumerGroup)) {
-        LOG.info("Principal:" + projectName__userName + " is not allowed to access group:" + resource.
-            name());
-        return false;
+      if (resource.name().contains(Consts.PROJECT_USER_DELIMITER)) {
+        String projectConsumerGroup = resource.name().split(Consts.PROJECT_USER_DELIMITER)[0];
+        LOG.debug("Consumer group :: projectCN:" + projectCN);
+        LOG.debug("Consumer group :: projectConsumerGroup:" + projectConsumerGroup);
+        //Chec
+        if (!projectCN.equals(projectConsumerGroup)) {
+          LOG.info("Principal:" + projectName__userName + " is not allowed to access group:" + resource.name());
+          return false;
+        }
       }
       LOG.info("Principal:" + projectName__userName + " is allowed to access group:" + resource.name());
       return true;
