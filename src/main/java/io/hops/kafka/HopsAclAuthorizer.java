@@ -126,7 +126,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
     java.util.Set<HopsAcl> resourceAcls;
     try {
-      resourceAcls = getTopicAcls(topicName);
+      resourceAcls = getTopicAcls(topicName, projectName__userName);
     } catch (SQLException ex) {
       LOG.error("Error while retrieving ACLs for topic:" + topicName, ex);
       return false;
@@ -273,25 +273,18 @@ public class HopsAclAuthorizer implements Authorizer {
    * @return
    * @throws SQLException
    */
-  private java.util.Set<HopsAcl> getTopicAcls(String topicName) throws SQLException {
+  private java.util.Set<HopsAcl> getTopicAcls(String topicName, String principal) throws SQLException {
     java.util.Set<HopsAcl> resourceAcls = new java.util.HashSet<>();
-    HopsAcl topicAcls;
     String projectName = dbConnection.getProjectName(topicName);
-    LOG.debug("getTopicAcls :: projectName" + projectName);
+    LOG.debug("getTopicAcls :: projectName:" + projectName);
     if (projectName == null) {
-      return resourceAcls;
+      return null;
     }
     //get all the acls for the given topic
-    topicAcls = dbConnection.getTopicAcls(topicName);
-    LOG.debug("getTopicAcls :: topicAcls" + topicAcls);
-    if (topicAcls != null) {
-      resourceAcls.add(topicAcls);
-    }
+    resourceAcls.addAll(dbConnection.getTopicAcls(topicName, principal));
     //get all the acls for wildcard topics
-    HopsAcl wildcardTopicAcls = dbConnection.getTopicAcls(Consts.WILDCARD);
-    if (wildcardTopicAcls != null) {
-      resourceAcls.add(wildcardTopicAcls);
-    }
+    resourceAcls.addAll(dbConnection.getTopicAcls(Consts.WILDCARD));
+    LOG.debug("getTopicAcls :: resourceAcls:" + resourceAcls);
     return resourceAcls;
   }
 

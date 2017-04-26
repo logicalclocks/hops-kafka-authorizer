@@ -66,24 +66,40 @@ public class DbConnection {
   /**
    *
    * @param topicName
+   * @param principal
    * @return
    * @throws SQLException
    */
-  public HopsAcl getTopicAcls(String topicName) throws SQLException {
+  public java.util.Set<HopsAcl> getTopicAcls(String topicName, String principal) throws SQLException {
+    try (Connection conn = datasource.getConnection()) {
+      try (PreparedStatement prepStatement = conn.prepareStatement(
+          "SELECT * from topic_acls where topic_name =? and principal=?")) {
+        prepStatement.setString(1, topicName);
+        prepStatement.setString(2, principal);
+        return fetchTopicAcls(prepStatement);
+      }
+    }
+  }
+
+  public java.util.Set<HopsAcl> getTopicAcls(String topicName) throws SQLException {
     try (Connection conn = datasource.getConnection()) {
       try (PreparedStatement prepStatement = conn.prepareStatement(
           "SELECT * from topic_acls where topic_name =?")) {
         prepStatement.setString(1, topicName);
-        try (ResultSet rst = prepStatement.executeQuery()) {
-          while (rst.next()) {
-            HopsAcl acl = new HopsAcl(rst.getString(Consts.PRINCIPAL), rst.getString(Consts.PERMISSION_TYPE),
-                rst.getString(Consts.OPERATION_TYPE), rst.getString(Consts.HOST), rst.getString(Consts.ROLE));
-            return acl;
-          }
-        }
+        return fetchTopicAcls(prepStatement);
       }
     }
-    return null;
+  }
+
+  private java.util.Set<HopsAcl> fetchTopicAcls(PreparedStatement prepStatement) throws SQLException {
+    try (ResultSet rst = prepStatement.executeQuery()) {
+      java.util.Set<HopsAcl> acls = new java.util.HashSet<>();
+      while (rst.next()) {
+        acls.add(new HopsAcl(rst.getString(Consts.PRINCIPAL), rst.getString(Consts.PERMISSION_TYPE),
+            rst.getString(Consts.OPERATION_TYPE), rst.getString(Consts.HOST), rst.getString(Consts.ROLE)));
+      }
+      return acls;
+    }
   }
 
   /**
