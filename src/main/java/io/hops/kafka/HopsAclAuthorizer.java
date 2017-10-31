@@ -183,21 +183,24 @@ public class HopsAclAuthorizer implements Authorizer {
   private Boolean aclMatch(String operations, String principal,
       String host, String permissionType, String role,
       java.util.Set<HopsAcl> acls) {
-    LOG.debug("aclMatch :: Operation:" + operations);
-    LOG.debug("aclMatch :: principal:" + principal);
-    LOG.debug("aclMatch :: host:" + host);
-    LOG.debug("aclMatch :: permissionType:" + permissionType);
-    LOG.debug("aclMatch :: role:" + role);
-    LOG.debug("aclMatch :: acls:" + acls);
+    if (acls != null && !acls.isEmpty()) {
+      LOG.debug("aclMatch :: Operation:" + operations);
+      LOG.debug("aclMatch :: principal:" + principal);
+      LOG.debug("aclMatch :: host:" + host);
+      LOG.debug("aclMatch :: permissionType:" + permissionType);
+      LOG.debug("aclMatch :: role:" + role);
+      LOG.debug("aclMatch :: acls:" + acls);
 
-    for (HopsAcl acl : acls) {
-      LOG.debug("aclMatch.acl" + acl);
-      if (acl.getPermissionType().equalsIgnoreCase(permissionType) && (acl.getPrincipal().equalsIgnoreCase(principal)
-          || acl.getPrincipal().equals(Consts.WILDCARD)) && (acl.getOperationType().equalsIgnoreCase(operations) || acl.
-          getOperationType().equalsIgnoreCase(Consts.WILDCARD)) && (acl.getHost().equalsIgnoreCase(host) || acl.
-          getHost().equals(Consts.WILDCARD)) && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(
-          Consts.WILDCARD))) {
-        return true;
+      for (HopsAcl acl : acls) {
+        LOG.debug("aclMatch.acl" + acl);
+        if (acl.getPermissionType().equalsIgnoreCase(permissionType) && (acl.getPrincipal().equalsIgnoreCase(principal)
+            || acl.getPrincipal().equals(Consts.WILDCARD)) && (acl.getOperationType().equalsIgnoreCase(operations)
+            || acl.
+                getOperationType().equalsIgnoreCase(Consts.WILDCARD)) && (acl.getHost().equalsIgnoreCase(host) || acl.
+            getHost().equals(Consts.WILDCARD)) && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(
+            Consts.WILDCARD))) {
+          return true;
+        }
       }
     }
     return false;
