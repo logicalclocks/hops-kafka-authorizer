@@ -61,10 +61,10 @@ public class HopsAclAuthorizer implements Authorizer {
           Integer.parseInt(configs.get(Consts.DATABASE_MAX_POOL_SIZE).toString()),
           configs.get(Consts.DATABASE_CACHE_PREPSTMTS).toString(),
           configs.get(Consts.DATABASE_PREPSTMT_CACHE_SIZE).toString(),
-          configs.get(Consts.DATABASE_PREPSTMT_CACHE_SQL_LIMIT).toString()
-      );
+          configs.get(Consts.DATABASE_PREPSTMT_CACHE_SQL_LIMIT).toString());
     } catch (SQLException ex) {
-      LOG.error("HopsAclAuthorizer could not connect to database at:" + configs.get(Consts.DATABASE_URL).toString(), ex);
+      LOG.error("HopsAclAuthorizer could not connect to database at:" + 
+          configs.get(Consts.DATABASE_URL).toString(), ex);
     }
 
     //grap the default acl property

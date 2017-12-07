@@ -2,7 +2,7 @@ package io.hops.kafka;
 
 /**
  *
- * @author misdess
+ * Topic ACL View in Database.
  */
 public class HopsAcl {
 

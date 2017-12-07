@@ -2,7 +2,10 @@ package io.hops.kafka;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import org.apache.log4j.Logger;
 
 /**
@@ -49,7 +52,8 @@ public class DbConnection {
         }
       }
       if (projectId != null) {
-        try (PreparedStatement prepStatement = conn.prepareStatement("SELECT id, projectname from project where id =?")) {
+        try (PreparedStatement prepStatement = conn.prepareStatement(
+            "SELECT id, projectname from project where id =?")) {
           prepStatement.setString(1, projectId);
           try (ResultSet rst = prepStatement.executeQuery()) {
             while (rst.next()) {
