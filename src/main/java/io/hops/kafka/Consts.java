@@ -27,7 +27,9 @@ public interface Consts {
   public static final String OPERATION_TYPE = "operation_type";
   public static final String HOST = "host";
   public static final String ROLE = "role";
-
+  public static final String TOPIC_NAME = "topic_name";
+  public static final String TEAM_ROLE = "team_role";
+  
   //Resource Types
   public static final String CLUSTER = "Cluster";
   public static final String TOPIC = "Topic";
@@ -47,4 +49,6 @@ public interface Consts {
   public final String DATABASE_PREPSTMT_CACHE_SIZE = "database.pool.prepstmt.cache.size";
   public final String DATABASE_PREPSTMT_CACHE_SQL_LIMIT = "database.pool.prepstmt.cache.sql.limit";
   public final String DATABASE_MAX_POOL_SIZE = "database.pool.size";
+  public final String DATABASE_ACL_POLLING_FREQUENCY_MS = "acl.polling.frequency.ms";
+  
 }
