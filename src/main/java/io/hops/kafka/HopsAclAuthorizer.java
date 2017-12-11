@@ -88,7 +88,7 @@ public class HopsAclAuthorizer implements Authorizer {
           try {
             dbConnection.populateACLInfo(acls);
             LOG.debug("Acls:"+acls);
-            Thread.sleep(1000);
+            Thread.sleep(Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS))));
           } catch (SQLException ex) {
             LOG.error("HopsAclAuthorizer could not query database at:" + configs.get(Consts.DATABASE_URL).toString(), 
                     ex);

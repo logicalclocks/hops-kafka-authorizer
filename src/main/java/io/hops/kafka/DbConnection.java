@@ -42,6 +42,7 @@ public class DbConnection {
   /**
    *
    * @param acls <TopicName,<Principal,HopsAcl>>
+   * @throws java.sql.SQLException
    * @thro
    * ws java.sql.SQLException
    */
