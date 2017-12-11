@@ -27,7 +27,9 @@ public interface Consts {
   public static final String OPERATION_TYPE = "operation_type";
   public static final String HOST = "host";
   public static final String ROLE = "role";
-
+  public static final String TOPIC_NAME = "topic_name";
+  public static final String TEAM_ROLE = "team_role";
+  
   //Resource Types
   public static final String CLUSTER = "Cluster";
   public static final String TOPIC = "Topic";

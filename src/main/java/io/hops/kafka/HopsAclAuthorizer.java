@@ -1,5 +1,6 @@
 package io.hops.kafka;
 
+import io.hops.kafka.authorizer.tables.HopsAcl;
 import kafka.network.RequestChannel;
 import kafka.security.auth.Acl;
 import kafka.security.auth.Authorizer;
@@ -11,6 +12,11 @@ import scala.collection.immutable.Set;
 
 import java.sql.SQLException;
 import java.util.HashSet;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.apache.log4j.Logger;
 
 /**
@@ -30,6 +36,8 @@ public class HopsAclAuthorizer implements Authorizer {
   //access to everyone. Defaults to false.
   private boolean shouldAllowEveryoneIfNoAclIsFound = false;
   DbConnection dbConnection;
+  //<TopicName,<Principal,HopsAcl>>
+  ConcurrentMap<String, java.util.Map<String, List<HopsAcl>>> acls = new ConcurrentHashMap<>();
 
   /**
    * Guaranteed to be called before any authorize call is made.
@@ -63,13 +71,36 @@ public class HopsAclAuthorizer implements Authorizer {
           configs.get(Consts.DATABASE_PREPSTMT_CACHE_SIZE).toString(),
           configs.get(Consts.DATABASE_PREPSTMT_CACHE_SQL_LIMIT).toString());
     } catch (SQLException ex) {
-      LOG.error("HopsAclAuthorizer could not connect to database at:" + 
-          configs.get(Consts.DATABASE_URL).toString(), ex);
+      LOG.error("HopsAclAuthorizer could not connect to database at:" + configs.get(Consts.DATABASE_URL).toString(),
+          ex);
     }
 
     //grap the default acl property
     shouldAllowEveryoneIfNoAclIsFound = Boolean.valueOf(
         configs.get(Consts.ALLOW_EVERYONE_IF_NO_ACS_FOUND_PROP).toString());
+
+    //Start the ACLs update thread
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    executor.submit(new Runnable() {
+      @Override
+      public void run() {
+        while (true) {
+          try {
+            dbConnection.populateACLInfo(acls);
+            LOG.debug("Acls:"+acls);
+            Thread.sleep(1000);
+          } catch (SQLException ex) {
+            LOG.error("HopsAclAuthorizer could not query database at:" + configs.get(Consts.DATABASE_URL).toString(), 
+                    ex);
+            //Clear the acls to indicate the error getting the acls from the database
+            acls.clear();
+          } catch (InterruptedException ex) {
+            LOG.error("HopsAclAuthorizer db polling exception", ex);
+            acls.clear();
+          }
+        }
+      }
+    });
   }
 
   @Override
@@ -124,24 +155,15 @@ public class HopsAclAuthorizer implements Authorizer {
       return true;
     }
 
-    java.util.Set<HopsAcl> resourceAcls;
-    try {
-      resourceAcls = getTopicAcls(topicName, projectName__userName);
-    } catch (SQLException ex) {
-      LOG.error("Error while retrieving ACLs for topic:" + topicName, ex);
+    if(acls.get(topicName).get(projectName__userName).isEmpty()){
+      LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
+        + ", allowMatch: false - no ACL found");
       return false;
     }
-    String role;
-    try {
-      role = dbConnection.getUserRole(projectName__userName);
-    } catch (SQLException ex) {
-      LOG.error("Could not get role from the database for:" + projectName__userName, ex);
-      return false;
-    }
-
     //check if there is any Deny acl match that would disallow this operation.
     boolean denyMatch = aclMatch(operation.name(), projectName__userName,
-        host, Consts.DENY, role, resourceAcls);
+        host, Consts.DENY, acls.get(topicName).get(projectName__userName).get(0).getProjectRole(), acls.get(topicName).
+        get(projectName__userName));
 
     //if principal is allowed to read or write we allow describe by default,
     //the reverse does not apply to Deny.
@@ -155,26 +177,27 @@ public class HopsAclAuthorizer implements Authorizer {
     //now check if there is any allow acl that will allow this operation.
     boolean allowMatch = false;
     for (String op : ops) {
-      if (aclMatch(op, projectName__userName, host, Consts.ALLOW, role,
-          resourceAcls)) {
+      if (aclMatch(op,
+          projectName__userName,
+          host,
+          Consts.ALLOW,
+          acls.get(topicName).get(projectName__userName).get(0).getProjectRole(),
+          acls.get(topicName).
+              get(projectName__userName))) {
         allowMatch = true;
       }
     }
 
     LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
         + ", allowMatch:" + allowMatch);
-    try {
-      /*
-       * we allow an operation if a user is a super user or if no acls are
-       * found and user has configured to allow all users when no acls are found
-       * or if no deny acls are found and at least one allow acls matches.
-       */
-      authorized = isSuperUser(principal) || isEmptyAclAndAuthorized(resourceAcls, topicName, projectName__userName)
-          || (!denyMatch && allowMatch);
-    } catch (SQLException ex) {
-      LOG.error("Could not get topic owner from database", ex);
-      return false;
-    }
+    /*
+     * we allow an operation if a user is a super user or if no acls are
+     * found and user has configured to allow all users when no acls are found
+     * or if no deny acls are found and at least one allow acls matches.
+     */
+    authorized = isSuperUser(principal)
+        || isEmptyAclAndAuthorized(acls.get(topicName).get(projectName__userName))
+        || (!denyMatch && allowMatch);
 
     //logAuditMessage(principal, authorized, operation, resource, host);
     return authorized;
@@ -182,7 +205,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
   private Boolean aclMatch(String operations, String principal,
       String host, String permissionType, String role,
-      java.util.Set<HopsAcl> acls) {
+      List<HopsAcl> acls) {
     if (acls != null && !acls.isEmpty()) {
       LOG.debug("aclMatch :: Operation:" + operations);
       LOG.debug("aclMatch :: principal:" + principal);
@@ -193,12 +216,12 @@ public class HopsAclAuthorizer implements Authorizer {
 
       for (HopsAcl acl : acls) {
         LOG.debug("aclMatch.acl" + acl);
-        if (acl.getPermissionType().equalsIgnoreCase(permissionType) && (acl.getPrincipal().equalsIgnoreCase(principal)
-            || acl.getPrincipal().equals(Consts.WILDCARD)) && (acl.getOperationType().equalsIgnoreCase(operations)
-            || acl.
-                getOperationType().equalsIgnoreCase(Consts.WILDCARD)) && (acl.getHost().equalsIgnoreCase(host) || acl.
-            getHost().equals(Consts.WILDCARD)) && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(
-            Consts.WILDCARD))) {
+        if (acl.getPermissionType().equalsIgnoreCase(permissionType)
+            && (acl.getPrincipal().equalsIgnoreCase(principal) || acl.getPrincipal().equals(Consts.WILDCARD))
+            && (acl.getOperationType().equalsIgnoreCase(operations) || acl.getOperationType().equalsIgnoreCase(
+            Consts.WILDCARD))
+            && (acl.getHost().equalsIgnoreCase(host) || acl.getHost().equals(Consts.WILDCARD))
+            && (acl.getRole().equalsIgnoreCase(role) || acl.getRole().equals(Consts.WILDCARD))) {
           return true;
         }
       }
@@ -206,13 +229,8 @@ public class HopsAclAuthorizer implements Authorizer {
     return false;
   }
 
-  private Boolean isEmptyAclAndAuthorized(java.util.Set<HopsAcl> acls,
-      String topicName, String principalName) throws SQLException {
+  private Boolean isEmptyAclAndAuthorized(List<HopsAcl> acls) {
     if (acls.isEmpty()) {
-      //Authorize if user is member of the topic owner project
-      if (dbConnection.isTopicOwner(topicName, principalName)) {
-        return true;
-      }
       return shouldAllowEveryoneIfNoAclIsFound;
     }
     return false;
@@ -268,27 +286,6 @@ public class HopsAclAuthorizer implements Authorizer {
   @Override
   public void close() {
     dbConnection.close();
-  }
-
-  /**
-   *
-   * @param topicName
-   * @return
-   * @throws SQLException
-   */
-  private java.util.Set<HopsAcl> getTopicAcls(String topicName, String principal) throws SQLException {
-    java.util.Set<HopsAcl> resourceAcls = new java.util.HashSet<>();
-    String projectName = dbConnection.getProjectName(topicName);
-    LOG.debug("getTopicAcls :: projectName:" + projectName);
-    if (projectName == null) {
-      return null;
-    }
-    //get all the acls for the given topic
-    resourceAcls.addAll(dbConnection.getTopicAcls(topicName, principal));
-    //get all the acls for wildcard topics
-    resourceAcls.addAll(dbConnection.getTopicAcls(Consts.WILDCARD));
-    LOG.debug("getTopicAcls :: resourceAcls:" + resourceAcls);
-    return resourceAcls;
   }
 
 }
