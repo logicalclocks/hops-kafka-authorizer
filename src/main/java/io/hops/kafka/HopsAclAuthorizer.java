@@ -11,6 +11,7 @@ import scala.collection.immutable.Map;
 import scala.collection.immutable.Set;
 
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,7 +38,7 @@ public class HopsAclAuthorizer implements Authorizer {
   private boolean shouldAllowEveryoneIfNoAclIsFound = false;
   DbConnection dbConnection;
   //<TopicName,<Principal,HopsAcl>>
-  ConcurrentMap<String, java.util.Map<String, List<HopsAcl>>> acls = new ConcurrentHashMap<>();
+  final ConcurrentMap<String, java.util.Map<String, List<HopsAcl>>> acls = new ConcurrentHashMap<>();
 
   /**
    * Guaranteed to be called before any authorize call is made.
@@ -87,11 +88,11 @@ public class HopsAclAuthorizer implements Authorizer {
         while (true) {
           try {
             dbConnection.populateACLInfo(acls);
-            LOG.debug("Acls:"+acls);
+            LOG.debug("Acls:" + acls);
             Thread.sleep(Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS))));
           } catch (SQLException ex) {
-            LOG.error("HopsAclAuthorizer could not query database at:" + configs.get(Consts.DATABASE_URL).toString(), 
-                    ex);
+            LOG.error("HopsAclAuthorizer could not query database at:" + configs.get(Consts.DATABASE_URL).toString(),
+                ex);
             //Clear the acls to indicate the error getting the acls from the database
             acls.clear();
           } catch (InterruptedException ex) {
@@ -154,16 +155,24 @@ public class HopsAclAuthorizer implements Authorizer {
       LOG.info("Principal:" + projectName__userName + " is allowed to access group:" + resource.name());
       return true;
     }
-
-    if(acls.get(topicName).get(projectName__userName).isEmpty()){
+    ConcurrentMap<String, HashMap<String, List<HopsAcl>>> currentAcl = new ConcurrentHashMap<>();
+    currentAcl.put(topicName, new HashMap<>());
+    synchronized (acls) {
+      if (acls.containsKey(topicName)) {
+        currentAcl.get(topicName).putAll(acls.get(topicName));
+      }
+    }
+        
+    if (!currentAcl.containsKey(topicName) || !currentAcl.get(topicName).containsKey(projectName__userName) 
+        || currentAcl.get(topicName).get(projectName__userName).isEmpty()) {
       LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
-        + ", allowMatch: false - no ACL found");
+          + ", allowMatch: false - no ACL found");
       return false;
     }
     //check if there is any Deny acl match that would disallow this operation.
     boolean denyMatch = aclMatch(operation.name(), projectName__userName,
-        host, Consts.DENY, acls.get(topicName).get(projectName__userName).get(0).getProjectRole(), acls.get(topicName).
-        get(projectName__userName));
+        host, Consts.DENY, currentAcl.get(topicName).get(projectName__userName).get(0).getProjectRole(), 
+        currentAcl.get(topicName).get(projectName__userName));
 
     //if principal is allowed to read or write we allow describe by default,
     //the reverse does not apply to Deny.
@@ -181,8 +190,8 @@ public class HopsAclAuthorizer implements Authorizer {
           projectName__userName,
           host,
           Consts.ALLOW,
-          acls.get(topicName).get(projectName__userName).get(0).getProjectRole(),
-          acls.get(topicName).
+          currentAcl.get(topicName).get(projectName__userName).get(0).getProjectRole(),
+          currentAcl.get(topicName).
               get(projectName__userName))) {
         allowMatch = true;
       }
@@ -196,7 +205,7 @@ public class HopsAclAuthorizer implements Authorizer {
      * or if no deny acls are found and at least one allow acls matches.
      */
     authorized = isSuperUser(principal)
-        || isEmptyAclAndAuthorized(acls.get(topicName).get(projectName__userName))
+        || isEmptyAclAndAuthorized(currentAcl.get(topicName).get(projectName__userName))
         || (!denyMatch && allowMatch);
 
     //logAuditMessage(principal, authorized, operation, resource, host);

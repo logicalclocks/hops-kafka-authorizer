@@ -43,8 +43,6 @@ public class DbConnection {
    *
    * @param acls <TopicName,<Principal,HopsAcl>>
    * @throws java.sql.SQLException
-   * @thro
-   * ws java.sql.SQLException
    */
   public void populateACLInfo(ConcurrentMap acls) throws SQLException {
     try (Connection conn = datasource.getConnection()) {
@@ -58,27 +56,32 @@ public class DbConnection {
           + "ORDER BY topic_name, principal ")) {
         Map<String, Map<String, List<HopsAcl>>> newAcls = new HashMap<>();
         try (ResultSet rst = prepStatement.executeQuery()) {
-          acls.clear();
-
-          while (rst.next()) {
-            HopsAcl acl = new HopsAcl(rst.getString(Consts.PRINCIPAL),
-                rst.getString(Consts.PERMISSION_TYPE),
-                rst.getString(Consts.OPERATION_TYPE),
-                rst.getString(Consts.HOST),
-                rst.getString(Consts.ROLE),
-                rst.getString(Consts.TEAM_ROLE));
-            if (!newAcls.containsKey(rst.getString(Consts.TOPIC_NAME))) {
-              newAcls.put(rst.getString(Consts.TOPIC_NAME), new HashMap<>());
+          synchronized (acls) {
+            acls.clear();
+            while (rst.next()) {
+              HopsAcl acl = new HopsAcl(rst.getString(Consts.PRINCIPAL),
+                  rst.getString(Consts.PERMISSION_TYPE),
+                  rst.getString(Consts.OPERATION_TYPE),
+                  rst.getString(Consts.HOST),
+                  rst.getString(Consts.ROLE),
+                  rst.getString(Consts.TEAM_ROLE));
+              if (!newAcls.containsKey(rst.getString(Consts.TOPIC_NAME))) {
+                newAcls.put(rst.getString(Consts.TOPIC_NAME), new HashMap<>());
+              }
+              if (!newAcls.get(rst.getString(Consts.TOPIC_NAME)).containsKey(rst.getString(Consts.PRINCIPAL))) {
+                newAcls.get(rst.getString(Consts.TOPIC_NAME)).put(rst.getString(Consts.PRINCIPAL), new ArrayList<>());
+              }
+              newAcls.get(rst.getString(Consts.TOPIC_NAME)).get(rst.getString(Consts.PRINCIPAL)).add(acl);
             }
-            if (!newAcls.get(rst.getString(Consts.TOPIC_NAME)).containsKey(rst.getString(Consts.PRINCIPAL))) {
-              newAcls.get(rst.getString(Consts.TOPIC_NAME)).put(rst.getString(Consts.PRINCIPAL), new ArrayList<>());
-            }
-            newAcls.get(rst.getString(Consts.TOPIC_NAME)).get(rst.getString(Consts.PRINCIPAL)).add(acl);
+            acls.putAll(newAcls);
           }
         }
-        acls.putAll(newAcls);
       }
     }
+  }
+
+  public synchronized void clearAcls(ConcurrentMap acls) {
+    acls.clear();
   }
 
   /**
