@@ -19,11 +19,11 @@ import org.apache.log4j.Logger;
  * <p>
  */
 public class DbConnection {
-
+  
   private static final Logger LOG = Logger.getLogger(DbConnection.class.getName());
-
+  
   HikariDataSource datasource = null;
-
+  
   public DbConnection(String dbType, String dbUrl, String dbUserName, String dbPassword, int maximumPoolSize,
       String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit) throws SQLException {
     LOG.info("Initializing database pool to:" + dbUrl);
@@ -38,49 +38,52 @@ public class DbConnection {
     datasource = new HikariDataSource(config);
     LOG.info("connection made successfully to:" + dbUrl);
   }
-
+  
   /**
    *
    * @param acls <TopicName,<Principal,HopsAcl>>
    * @throws java.sql.SQLException
-   * @thro
-   * ws java.sql.SQLException
    */
   public void populateACLInfo(ConcurrentMap acls) throws SQLException {
     try (Connection conn = datasource.getConnection()) {
       try (PreparedStatement prepStatement = conn.prepareStatement(
           "SELECT DISTINCT acls.*,project_team.team_role "
-          + "FROM topic_acls as acls, project, users, project_team "
-          + "WHERE project.id = acls.project_id "
-          + "AND project_team.project_id = acls.project_id "
-          + "AND project_team.team_member = users.email "
-          + "AND users.username = substring_index(principal, '" + Consts.PROJECT_USER_DELIMITER + "', -1) "
-          + "ORDER BY topic_name, principal ")) {
+              + "FROM topic_acls as acls, project, users, project_team "
+              + "WHERE project.id = acls.project_id "
+              + "AND project_team.project_id = acls.project_id "
+              + "AND project_team.team_member = users.email "
+              + "AND users.username = substring_index(principal, '" + Consts.PROJECT_USER_DELIMITER + "', -1) "
+              + "ORDER BY topic_name, principal ")) {
         Map<String, Map<String, List<HopsAcl>>> newAcls = new HashMap<>();
         try (ResultSet rst = prepStatement.executeQuery()) {
-          acls.clear();
-
-          while (rst.next()) {
-            HopsAcl acl = new HopsAcl(rst.getString(Consts.PRINCIPAL),
-                rst.getString(Consts.PERMISSION_TYPE),
-                rst.getString(Consts.OPERATION_TYPE),
-                rst.getString(Consts.HOST),
-                rst.getString(Consts.ROLE),
-                rst.getString(Consts.TEAM_ROLE));
-            if (!newAcls.containsKey(rst.getString(Consts.TOPIC_NAME))) {
-              newAcls.put(rst.getString(Consts.TOPIC_NAME), new HashMap<>());
+          synchronized (acls) {
+            acls.clear();
+            while (rst.next()) {
+              HopsAcl acl = new HopsAcl(rst.getString(Consts.PRINCIPAL),
+                  rst.getString(Consts.PERMISSION_TYPE),
+                  rst.getString(Consts.OPERATION_TYPE),
+                  rst.getString(Consts.HOST),
+                  rst.getString(Consts.ROLE),
+                  rst.getString(Consts.TEAM_ROLE));
+              if (!newAcls.containsKey(rst.getString(Consts.TOPIC_NAME))) {
+                newAcls.put(rst.getString(Consts.TOPIC_NAME), new HashMap<>());
+              }
+              if (!newAcls.get(rst.getString(Consts.TOPIC_NAME)).containsKey(rst.getString(Consts.PRINCIPAL))) {
+                newAcls.get(rst.getString(Consts.TOPIC_NAME)).put(rst.getString(Consts.PRINCIPAL), new ArrayList<>());
+              }
+              newAcls.get(rst.getString(Consts.TOPIC_NAME)).get(rst.getString(Consts.PRINCIPAL)).add(acl);
             }
-            if (!newAcls.get(rst.getString(Consts.TOPIC_NAME)).containsKey(rst.getString(Consts.PRINCIPAL))) {
-              newAcls.get(rst.getString(Consts.TOPIC_NAME)).put(rst.getString(Consts.PRINCIPAL), new ArrayList<>());
-            }
-            newAcls.get(rst.getString(Consts.TOPIC_NAME)).get(rst.getString(Consts.PRINCIPAL)).add(acl);
+            acls.putAll(newAcls);
           }
         }
-        acls.putAll(newAcls);
       }
     }
   }
-
+  
+  public synchronized void clearAcls(ConcurrentMap acls) {
+    acls.clear();
+  }
+  
   /**
    * Closes the jdbc datasource pool.
    */
