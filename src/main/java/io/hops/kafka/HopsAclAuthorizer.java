@@ -29,11 +29,11 @@ import org.apache.log4j.Logger;
 public class HopsAclAuthorizer implements Authorizer {
   
   private static final Logger LOG = Logger.getLogger("kafka.authorizer.logger");
-  //List of users that will be treated as super users and will have access to 
+  //List of users that will be treated as super users and will have access to
   //all the resources for all actions from all hosts, defaults to no super users.
   private java.util.Set<KafkaPrincipal> superUsers = new java.util.HashSet<>();
   
-  //If set to true when no acls are found for a resource , authorizer allows 
+  //If set to true when no acls are found for a resource , authorizer allows
   //access to everyone. Defaults to false.
   private boolean shouldAllowEveryoneIfNoAclIsFound = false;
   DbConnection dbConnection;
