@@ -18,6 +18,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.apache.log4j.Logger;
 
 /**
@@ -39,7 +42,8 @@ public class HopsAclAuthorizer implements Authorizer {
   DbConnection dbConnection;
   //<TopicName,<Principal,HopsAcl>>
   final ConcurrentMap<String, java.util.Map<String, List<HopsAcl>>> acls = new ConcurrentHashMap<>();
-  
+  private final String sqlExceptionPattern = "HikariDataSource.+has been closed.";
+
   /**
    * Guaranteed to be called before any authorize call is made.
    *
@@ -76,23 +80,27 @@ public class HopsAclAuthorizer implements Authorizer {
           ex);
     }
     
-    //grap the default acl property
+    //grep the default acl property
     shouldAllowEveryoneIfNoAclIsFound = Boolean.valueOf(
         configs.get(Consts.ALLOW_EVERYONE_IF_NO_ACS_FOUND_PROP).toString());
     
     //Start the ACLs update thread
     ExecutorService executor = Executors.newSingleThreadExecutor();
-    executor.submit(new Runnable() {
-      @Override
-      public void run() {
+    Pattern r = Pattern.compile(sqlExceptionPattern);
+    executor.submit((Runnable) () -> {
         while (true) {
           try {
             dbConnection.populateACLInfo(acls);
             LOG.debug("Acls:" + acls);
             Thread.sleep(Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS))));
           } catch (SQLException ex) {
-            LOG.error("HopsAclAuthorizer could not query database at:" + configs.get(Consts.DATABASE_URL).toString(),
-                ex);
+            // If the exception is due to a closed pool, it is most likely that the service has been externally
+            // shut down and there is not much we can do here.
+            Matcher m = r.matcher(ex.getMessage());
+            if (!m.find()) {
+              LOG.error("HopsAclAuthorizer could not query database at:"
+                      + configs.get(Consts.DATABASE_URL).toString(), ex);
+            }
             //Clear the acls to indicate the error getting the acls from the database
             acls.clear();
           } catch (InterruptedException ex) {
@@ -100,8 +108,7 @@ public class HopsAclAuthorizer implements Authorizer {
             acls.clear();
           }
         }
-      }
-    });
+      });
   }
   
   @Override
