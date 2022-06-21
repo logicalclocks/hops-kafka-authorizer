@@ -43,7 +43,10 @@ public class HopsAclAuthorizer implements Authorizer {
   //<TopicName,<Principal,HopsAcl>>
   final ConcurrentMap<String, java.util.Map<String, List<HopsAcl>>> acls = new ConcurrentHashMap<>();
   private final String sqlExceptionPattern = "HikariDataSource.+has been closed.";
-
+  
+  private final Pattern r = Pattern.compile(sqlExceptionPattern);
+  
+  
   /**
    * Guaranteed to be called before any authorize call is made.
    *
@@ -86,7 +89,6 @@ public class HopsAclAuthorizer implements Authorizer {
     
     //Start the ACLs update thread
     ExecutorService executor = Executors.newSingleThreadExecutor();
-    Pattern r = Pattern.compile(sqlExceptionPattern);
     executor.submit((Runnable) () -> {
         while (true) {
           try {
@@ -117,18 +119,17 @@ public class HopsAclAuthorizer implements Authorizer {
     
     KafkaPrincipal principal = session.principal();
     String host = session.clientAddress().getHostAddress();
+    String topicName = resource.name();
+    String projectName__userName = principal.getName();
+  
     LOG.debug("authorize :: session:" + session);
     LOG.debug("authorize :: principal.name:" + principal.getName());
-    LOG.debug("authorize :: principal.type:" + principal.
-        getPrincipalType());
+    LOG.debug("authorize :: principal.type:" + principal.getPrincipalType());
     LOG.debug("authorize :: operation:" + operation);
     LOG.debug("authorize :: host:" + host);
     LOG.debug("authorize :: resource:" + resource);
-    String topicName = resource.name();
     LOG.debug("authorize :: topicName:" + topicName);
-    String projectName__userName = principal.getName();
-    LOG.debug("authorize :: projectName__userName:"
-        + projectName__userName);
+    LOG.debug("authorize :: projectName__userName:" + projectName__userName);
     
     if (projectName__userName.equalsIgnoreCase(Consts.ANONYMOUS)) {
       LOG.info("No Acl found for cluster authorization, user:" + projectName__userName);
@@ -138,7 +139,6 @@ public class HopsAclAuthorizer implements Authorizer {
     if (isSuperUser(principal)) {
       return true;
     }
-    boolean authorized;
     
     if (resource.resourceType().equals(
         kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.CLUSTER))) {
@@ -162,25 +162,59 @@ public class HopsAclAuthorizer implements Authorizer {
       LOG.info("Principal:" + projectName__userName + " is allowed to access group:" + resource.name());
       return true;
     }
-    ConcurrentMap<String, HashMap<String, List<HopsAcl>>> currentAcl = new ConcurrentHashMap<>();
-    currentAcl.put(topicName, new HashMap<>());
+  
+    // First check if there are ACLs for the topic available, if not -> refresh cache
+    HashMap<String, List<HopsAcl>> currentAcl = new HashMap<>();
     synchronized (acls) {
       if (acls.containsKey(topicName)) {
-        currentAcl.get(topicName).putAll(acls.get(topicName));
+        currentAcl.putAll(acls.get(topicName));
+      }
+    }
+  
+    if (!currentAcl.containsKey(projectName__userName) || currentAcl.get(projectName__userName).isEmpty()) {
+      LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
+        + ", allowMatch: false - no ACL found, going to refresh cache and retry");
+      // update cache and then retry
+      try {
+        dbConnection.populateACLInfo(acls);
+        LOG.debug("Acls:" + acls);
+      } catch (SQLException ex) {
+        // If the exception is due to a closed pool, it is most likely that the service has been externally
+        // shut down and there is not much we can do here.
+        Matcher m = r.matcher(ex.getMessage());
+        if (!m.find()) {
+          LOG.error("HopsAclAuthorizer could not query database", ex);
+        }
+        //Clear the acls to indicate the error getting the acls from the database
+        acls.clear();
       }
     }
     
-    if (!currentAcl.containsKey(topicName) || !currentAcl.get(topicName).containsKey(projectName__userName)
-        || currentAcl.get(topicName).get(projectName__userName).isEmpty()) {
+    return authorize(principal, operation, resource, host, topicName, projectName__userName);
+  }
+  
+  
+  private boolean authorize(KafkaPrincipal principal, Operation operation, Resource resource, String host,
+    String topicName, String projectName__userName) {
+    boolean authorized;
+  
+    HashMap<String, List<HopsAcl>> currentAcl = new HashMap<>();
+    synchronized (acls) {
+      if (acls.containsKey(topicName)) {
+        currentAcl.putAll(acls.get(topicName));
+      }
+    }
+  
+    if (!currentAcl.containsKey(projectName__userName) || currentAcl.get(projectName__userName).isEmpty()) {
       LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
-          + ", allowMatch: false - no ACL found");
+        + ", allowMatch: false - no ACL found");
       return false;
     }
     //check if there is any Deny acl match that would disallow this operation.
     boolean denyMatch = aclMatch(operation.name(), projectName__userName,
-        host, Consts.DENY, currentAcl.get(topicName).get(projectName__userName).get(0).getProjectRole(),
-        currentAcl.get(topicName).get(projectName__userName));
-    
+      host, Consts.DENY, currentAcl.get(projectName__userName).get(0).getProjectRole(),
+      currentAcl.get(projectName__userName));
+  
     //if principal is allowed to read or write we allow describe by default,
     //the reverse does not apply to Deny.
     java.util.Set<String> ops = new HashSet<>();
@@ -189,32 +223,31 @@ public class HopsAclAuthorizer implements Authorizer {
       ops.add(Consts.WRITE);
       ops.add(Consts.READ);
     }
-    
+  
     //now check if there is any allow acl that will allow this operation.
     boolean allowMatch = false;
     for (String op : ops) {
       if (aclMatch(op,
-          projectName__userName,
-          host,
-          Consts.ALLOW,
-          currentAcl.get(topicName).get(projectName__userName).get(0).getProjectRole(),
-          currentAcl.get(topicName).
-              get(projectName__userName))) {
+        projectName__userName,
+        host,
+        Consts.ALLOW,
+        currentAcl.get(projectName__userName).get(0).getProjectRole(),
+        currentAcl.get(projectName__userName))) {
         allowMatch = true;
       }
     }
-    
+  
     LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
-        + ", allowMatch:" + allowMatch);
+      + ", allowMatch:" + allowMatch);
     /*
      * we allow an operation if a user is a super user or if no acls are
      * found and user has configured to allow all users when no acls are found
      * or if no deny acls are found and at least one allow acls matches.
      */
     authorized = isSuperUser(principal)
-        || isEmptyAclAndAuthorized(currentAcl.get(topicName).get(projectName__userName))
-        || (!denyMatch && allowMatch);
-    
+      || isEmptyAclAndAuthorized(currentAcl.get(projectName__userName))
+      || (!denyMatch && allowMatch);
+  
     //logAuditMessage(principal, authorized, operation, resource, host);
     return authorized;
   }
