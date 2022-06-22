@@ -170,7 +170,8 @@ public class HopsAclAuthorizer implements Authorizer {
       }
     }
   
-    if (!currentAcl.containsKey(projectName__userName) || currentAcl.get(projectName__userName).isEmpty()) {
+    if (!operation.name().equalsIgnoreCase(Consts.DESCRIBE)
+        && (!currentAcl.containsKey(projectName__userName) || currentAcl.get(projectName__userName).isEmpty())) {
       LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
         + ", allowMatch: false - no ACL found, going to refresh cache and retry");
       // update cache and then retry
