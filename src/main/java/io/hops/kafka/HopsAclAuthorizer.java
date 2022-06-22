@@ -46,7 +46,6 @@ public class HopsAclAuthorizer implements Authorizer {
   
   private final Pattern r = Pattern.compile(sqlExceptionPattern);
   
-  
   /**
    * Guaranteed to be called before any authorize call is made.
    *
@@ -192,7 +191,6 @@ public class HopsAclAuthorizer implements Authorizer {
     
     return authorize(principal, operation, resource, host, topicName, projectName__userName);
   }
-  
   
   private boolean authorize(KafkaPrincipal principal, Operation operation, Resource resource, String host,
     String topicName, String projectName__userName) {
