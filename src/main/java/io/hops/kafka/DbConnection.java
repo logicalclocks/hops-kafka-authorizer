@@ -4,14 +4,13 @@ import io.hops.kafka.authorizer.tables.HopsAcl;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
 import org.apache.log4j.Logger;
 
 /**
@@ -21,11 +20,19 @@ import org.apache.log4j.Logger;
 public class DbConnection {
   
   private static final Logger LOG = Logger.getLogger(DbConnection.class.getName());
+
+  private static final String SQL_COMMAND = "SELECT DISTINCT acls.*,project_team.team_role "
+      + "FROM topic_acls as acls, users, project_team "
+      + "WHERE project_team.project_id = acls.project_id "
+      + "AND project_team.team_member = users.email "
+      + "AND users.username = substring_index(principal, '" + Consts.PROJECT_USER_DELIMITER + "', -1) "
+      + "ORDER BY topic_name, principal";
+
+  private HikariDataSource datasource = null;
   
-  HikariDataSource datasource = null;
-  
-  public DbConnection(String dbType, String dbUrl, String dbUserName, String dbPassword, int maximumPoolSize,
-      String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit) throws SQLException {
+  public DbConnection(String dbUrl, String dbUserName, String dbPassword, int maximumPoolSize,
+                      String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit)
+      throws SQLException {
     LOG.info("Initializing database pool to:" + dbUrl);
     HikariConfig config = new HikariConfig();
     config.setJdbcUrl("jdbc:mysql://" + dbUrl);
@@ -38,52 +45,50 @@ public class DbConnection {
     datasource = new HikariDataSource(config);
     LOG.info("connection made successfully to:" + dbUrl);
   }
-  
-  /**
-   *
-   * @param acls <TopicName,<Principal,HopsAcl>>
-   * @throws java.sql.SQLException
-   */
-  public void populateACLInfo(ConcurrentMap acls) throws SQLException {
-    try (Connection conn = datasource.getConnection()) {
-      try (PreparedStatement prepStatement = conn.prepareStatement(
-          "SELECT DISTINCT acls.*,project_team.team_role "
-              + "FROM topic_acls as acls, project, users, project_team "
-              + "WHERE project.id = acls.project_id "
-              + "AND project_team.project_id = acls.project_id "
-              + "AND project_team.team_member = users.email "
-              + "AND users.username = substring_index(principal, '" + Consts.PROJECT_USER_DELIMITER + "', -1) "
-              + "ORDER BY topic_name, principal ")) {
-        Map<String, Map<String, List<HopsAcl>>> newAcls = new HashMap<>();
-        try (ResultSet rst = prepStatement.executeQuery()) {
-          synchronized (acls) {
-            acls.clear();
-            while (rst.next()) {
-              HopsAcl acl = new HopsAcl(rst.getString(Consts.PRINCIPAL),
-                  rst.getString(Consts.PERMISSION_TYPE),
-                  rst.getString(Consts.OPERATION_TYPE),
-                  rst.getString(Consts.HOST),
-                  rst.getString(Consts.ROLE),
-                  rst.getString(Consts.TEAM_ROLE));
-              if (!newAcls.containsKey(rst.getString(Consts.TOPIC_NAME))) {
-                newAcls.put(rst.getString(Consts.TOPIC_NAME), new HashMap<>());
-              }
-              if (!newAcls.get(rst.getString(Consts.TOPIC_NAME)).containsKey(rst.getString(Consts.PRINCIPAL))) {
-                newAcls.get(rst.getString(Consts.TOPIC_NAME)).put(rst.getString(Consts.PRINCIPAL), new ArrayList<>());
-              }
-              newAcls.get(rst.getString(Consts.TOPIC_NAME)).get(rst.getString(Consts.PRINCIPAL)).add(acl);
-            }
-            acls.putAll(newAcls);
-          }
-        }
+
+  public Map<String, Map<String, List<HopsAcl>>> getAcls() throws SQLException {
+    Connection connection = null;
+    Statement statement = null;
+    ResultSet resultSet = null;
+
+    Map<String, Map<String, List<HopsAcl>>> newAcls = new HashMap<>();
+
+    try {
+      connection = datasource.getConnection();
+      statement = connection.createStatement();
+      resultSet = statement.executeQuery(SQL_COMMAND);
+
+      while (resultSet.next()) {
+        HopsAcl acl = new HopsAcl(resultSet.getString(Consts.TOPIC_NAME),
+            resultSet.getString(Consts.PRINCIPAL),
+            resultSet.getString(Consts.PERMISSION_TYPE),
+            resultSet.getString(Consts.OPERATION_TYPE),
+            resultSet.getString(Consts.HOST),
+            resultSet.getString(Consts.ROLE),
+            resultSet.getString(Consts.TEAM_ROLE)
+        );
+
+        Map<String, List<HopsAcl>> topicAcls = newAcls.getOrDefault(acl.getTopicName(), new HashMap<>());
+        List<HopsAcl> topicPrincipalAcl = topicAcls.getOrDefault(acl.getPrincipal(), new ArrayList<>());
+        topicPrincipalAcl.add(acl);
+        topicAcls.put(acl.getPrincipal(), topicPrincipalAcl);
+        newAcls.put(acl.getTopicName(), topicAcls);
+      }
+    } finally {
+      if (statement != null) {
+        statement.close();
+      }
+      if (resultSet != null) {
+        resultSet.close();
+      }
+      if (connection != null) {
+        connection.close();
       }
     }
+
+    return newAcls;
   }
-  
-  public synchronized void clearAcls(ConcurrentMap acls) {
-    acls.clear();
-  }
-  
+
   /**
    * Closes the jdbc datasource pool.
    */
