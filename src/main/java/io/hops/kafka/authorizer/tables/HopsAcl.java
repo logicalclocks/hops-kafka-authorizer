@@ -8,7 +8,6 @@ public class HopsAcl {
 
   int Id;
   String topicName;
-  int projectId;
   String principal;
   String permissionType;
   String operationType;
@@ -19,26 +18,15 @@ public class HopsAcl {
   public HopsAcl() {
   }
 
-  public HopsAcl(String principal, String permissionType, String operationType,
-      String host, String role, String projectRole) {
+  public HopsAcl(String topicName, String principal, String permissionType,
+                 String operationType, String host, String role, String projectRole) {
+    this.topicName = topicName;
     this.principal = principal;
     this.permissionType = permissionType;
     this.operationType = operationType;
     this.host = host;
     this.role = role;
     this.projectRole = projectRole;
-  }
-
-  public HopsAcl(int Id, String topicName, int projectId, String principal, String permissionType, String operationType,
-      String host, String role) {
-    this.Id = Id;
-    this.topicName = topicName;
-    this.projectId = projectId;
-    this.principal = principal;
-    this.permissionType = permissionType;
-    this.operationType = operationType;
-    this.host = host;
-    this.role = role;
   }
 
   public String getPrincipal() {
@@ -95,14 +83,6 @@ public class HopsAcl {
 
   public void setTopicName(String topicName) {
     this.topicName = topicName;
-  }
-
-  public int getProjectId() {
-    return projectId;
-  }
-
-  public void setProjectId(int projectId) {
-    this.projectId = projectId;
   }
 
   public String getProjectRole() {
