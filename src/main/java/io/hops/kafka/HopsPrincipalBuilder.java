@@ -22,6 +22,7 @@ import org.apache.kafka.common.network.Authenticator;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.PrincipalBuilder;
+import sun.security.x509.X500Name;
 
 /**
  * Customized Principal Builder for HopsWorks.
@@ -37,6 +38,7 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
   /*
    * By default, the TLS user name will be of the form
    * "CN=host1.example.com,OU=,O=Confluent,L=London,ST=London,C=GB".
+   * The order of the fields of the X500 name IS NOT GUARANTEED
    * This builder class extracts host1.example.com.
    * In our case it will be, principalType:projectName__userName.
    */
@@ -44,7 +46,7 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
   public Principal buildPrincipal(TransportLayer transportLayer,
       Authenticator authenticator) throws KafkaException {
     try {
-      Principal principal = transportLayer.peerPrincipal();
+      Principal principal = getPrincipal(transportLayer);
 
       if (!((principal instanceof X500Principal)
           || (principal instanceof KafkaPrincipal))) {
@@ -57,15 +59,16 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
       }
 
       String userType = principal.toString().split(Consts.COLON_SEPARATOR)[0];
-      String projectName__userName = TLSUserName.
-          split(Consts.COMMA_SEPARATOR, 6)[0].
-          split(Consts.ASSIGN_SEPARATOR)[1];
-      Principal kafkaPrincipal = new KafkaPrincipal(userType,
-          projectName__userName);
-      return kafkaPrincipal;
+      X500Name name = new X500Name(TLSUserName);
+      String projectName__userName = name.getCommonName();
+      return new KafkaPrincipal(userType, projectName__userName);
     } catch (IOException e) {
       throw new KafkaException("Failed to build Kafka principal due to: ", e);
     }
+  }
+
+  protected Principal getPrincipal(TransportLayer transportLayer) throws IOException {
+    return transportLayer.peerPrincipal();
   }
 
   @Override
