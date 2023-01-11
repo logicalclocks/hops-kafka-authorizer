@@ -4,7 +4,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import io.hops.kafka.authorizer.tables.HopsAcl;
-import jdk.internal.org.jline.utils.Log;
 import kafka.network.RequestChannel;
 import kafka.security.auth.Acl;
 import kafka.security.auth.Authorizer;
