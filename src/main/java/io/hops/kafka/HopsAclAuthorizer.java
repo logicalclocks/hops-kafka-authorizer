@@ -38,6 +38,8 @@ public class HopsAclAuthorizer implements Authorizer {
 
   private LoadingCache<String, List<HopsAcl>> aclMapping;
 
+  public HopsAclAuthorizer() {}
+
   // For testing
   protected HopsAclAuthorizer(LoadingCache loadingCache) {
     aclMapping = loadingCache;
@@ -159,7 +161,7 @@ public class HopsAclAuthorizer implements Authorizer {
     List<HopsAcl> projectUserAcls = aclList.stream()
         .filter(hopsAcl -> hopsAcl.getPrincipal().equals(projectName__userName)).collect(Collectors.toList());
     if (projectUserAcls.isEmpty()) {
-      LOG.error("For principal: " + projectName__userName
+      LOG.info("For principal: " + projectName__userName
           + ", operation:" + operation
           + ", resource:" + resource
           + ", allowMatch: false - no ACL found");
