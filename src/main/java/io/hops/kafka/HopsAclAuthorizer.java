@@ -1,6 +1,10 @@
 package io.hops.kafka;
 
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import io.hops.kafka.authorizer.tables.HopsAcl;
+import jdk.internal.org.jline.utils.Log;
 import kafka.network.RequestChannel;
 import kafka.security.auth.Acl;
 import kafka.security.auth.Authorizer;
@@ -9,15 +13,12 @@ import kafka.security.auth.Resource;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
 import java.sql.SQLException;
-import java.util.Map;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.apache.log4j.Logger;
 
@@ -30,23 +31,17 @@ import org.apache.log4j.Logger;
 public class HopsAclAuthorizer implements Authorizer {
   
   private static final Logger LOG = Logger.getLogger("kafka.authorizer.logger");
-  //List of users that will be treated as super users and will have access to
+  //List of users that will be treated as superusers and will have access to
   //all the resources for all actions from all osts, defaults to no super users.
   private Set<KafkaPrincipal> superUsers = new HashSet<>();
-  
-  DbConnection dbConnection;
-  //<TopicName,<Principal,HopsAcl>>
-  final Map<String, Map<String, List<HopsAcl>>> acls;
 
-  private final String sqlExceptionPattern = "HikariDataSource.+has been closed.";
-  private final Pattern r = Pattern.compile(sqlExceptionPattern);
+  private DbConnection dbConnection;
 
-  public HopsAclAuthorizer() {
-    acls = new HashMap<>();
-  }
+  private LoadingCache<String, List<HopsAcl>> aclMapping;
 
-  public HopsAclAuthorizer(Map<String, Map<String, List<HopsAcl>>> acls) {
-    this.acls = acls;
+  // For testing
+  protected HopsAclAuthorizer(LoadingCache loadingCache) {
+    aclMapping = loadingCache;
   }
 
   /**
@@ -83,20 +78,21 @@ public class HopsAclAuthorizer implements Authorizer {
       LOG.error("HopsAclAuthorizer could not connect to database at:" + configs.get(Consts.DATABASE_URL).toString(),
           ex);
     }
-    
-    //Start the ACLs update thread
-    ExecutorService executor = Executors.newSingleThreadExecutor();
-    executor.submit((Runnable) () -> {
-        while (true) {
-          try {
-            updateAclCache();
-            Thread.sleep(Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS))));
-          } catch (InterruptedException ex) {
-            LOG.error("HopsAclAuthorizer db polling exception", ex);
-            acls.clear();
+
+    long expireDuration = Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS)));
+    aclMapping = CacheBuilder.newBuilder()
+        .expireAfterWrite(expireDuration, TimeUnit.MILLISECONDS)
+        .removalListener(removalNotification -> {
+            String topicName = (String) removalNotification.getKey();
+            LOG.info("Invalidating cache for"
+                + " topic: " + topicName);
+          })
+        .build(new CacheLoader<String, List<HopsAcl>>() {
+          @Override
+          public List<HopsAcl> load(String topicName) throws Exception {
+            return dbConnection.getAcls(topicName);
           }
-        }
-      });
+        });
   }
   
   @Override
@@ -146,38 +142,24 @@ public class HopsAclAuthorizer implements Authorizer {
       LOG.info("Principal:" + projectName__userName + " is allowed to access group:" + resource.name());
       return true;
     }
-  
-    // First check if there are ACLs for the topic available, if not -> refresh cache
-    Map<String, List<HopsAcl>> topicAcls;
-    synchronized (acls) {
-      topicAcls = acls.get(topicName);
+
+    List<HopsAcl> aclList;
+    try {
+      aclList = aclMapping.get(topicName);
+    } catch (ExecutionException e) {
+      Log.error("Error retrieving acls from mapping", e);
+      return false;
     }
 
-    if (topicAcls == null) {
-      updateAclCache();
-      synchronized (acls) {
-        topicAcls = acls.get(topicName);
-      }
-
-      // if the topic Acls is still null, then throw an exception
-      if (topicAcls == null) {
-        LOG.info("For principal: " + projectName__userName
-            + ", topic:" + topicName
-            + ", operation:" + operation
-            + ", resource:" + resource
-            + ", Topic not found");
-        return false;
-      }
-    }
-
-    return authorizeProjectUser(operation, resource, host, topicAcls, projectName__userName);
+    return authorizeProjectUser(operation, resource, host, aclList, projectName__userName);
   }
 
   private boolean authorizeProjectUser(Operation operation, Resource resource, String host,
-                                       Map<String, List<HopsAcl>> topicAcls, String projectName__userName) {
+                                       List<HopsAcl> aclList, String projectName__userName) {
 
-    List<HopsAcl> projectUserAcls = topicAcls.get(projectName__userName);
-    if (projectUserAcls == null || projectUserAcls.isEmpty()) {
+    List<HopsAcl> projectUserAcls = aclList.stream()
+        .filter(hopsAcl -> hopsAcl.getPrincipal().equals(projectName__userName)).collect(Collectors.toList());
+    if (projectUserAcls.isEmpty()) {
       LOG.info("For principal: " + projectName__userName
           + ", operation:" + operation
           + ", resource:" + resource
@@ -187,7 +169,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
     //check if there is any Deny acl match that would disallow this operation.
     boolean denyMatch = aclMatch(operation.name(), projectName__userName,
-      host, Consts.DENY, projectUserAcls.get(0).getProjectRole(), projectUserAcls);
+        host, Consts.DENY, projectUserAcls.get(0).getProjectRole(), projectUserAcls);
 
     LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
         + ", denyMatch:" + denyMatch);
@@ -196,7 +178,7 @@ public class HopsAclAuthorizer implements Authorizer {
         host, Consts.ALLOW, projectUserAcls.get(0).getProjectRole(), projectUserAcls);
 
     LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
-      + ", allowMatch:" + allowMatch);
+        + ", allowMatch:" + allowMatch);
 
     return !denyMatch && allowMatch;
   }
@@ -223,26 +205,6 @@ public class HopsAclAuthorizer implements Authorizer {
       }
     }
     return false;
-  }
-
-  private void updateAclCache() {
-    try {
-      Map<String, Map<String, List<HopsAcl>>> dbAcls = dbConnection.getAcls();
-      LOG.debug("Acls:" + dbAcls);
-      synchronized (acls) {
-        acls.clear();
-        acls.putAll(dbAcls);
-      }
-    } catch (SQLException ex) {
-      // If the exception is due to a closed pool, it is most likely that the service has been externally
-      // shut down and there is not much we can do here.
-      Matcher m = r.matcher(ex.getMessage());
-      if (!m.find()) {
-        LOG.error("HopsAclAuthorizer could not query database", ex);
-      }
-      //Clear the acls to indicate the error getting the acls from the database
-      acls.clear();
-    }
   }
   
   private boolean isSuperUser(KafkaPrincipal principal) {
