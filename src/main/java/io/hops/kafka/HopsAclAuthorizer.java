@@ -147,7 +147,7 @@ public class HopsAclAuthorizer implements Authorizer {
     try {
       aclList = aclMapping.get(topicName);
     } catch (ExecutionException e) {
-      Log.error("Error retrieving acls from mapping", e);
+      LOG.error("Error retrieving acls from mapping", e);
       return false;
     }
 
@@ -160,7 +160,7 @@ public class HopsAclAuthorizer implements Authorizer {
     List<HopsAcl> projectUserAcls = aclList.stream()
         .filter(hopsAcl -> hopsAcl.getPrincipal().equals(projectName__userName)).collect(Collectors.toList());
     if (projectUserAcls.isEmpty()) {
-      LOG.info("For principal: " + projectName__userName
+      LOG.error("For principal: " + projectName__userName
           + ", operation:" + operation
           + ", resource:" + resource
           + ", allowMatch: false - no ACL found");
