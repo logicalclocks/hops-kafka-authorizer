@@ -60,15 +60,20 @@ public class TestHopsPrincipalBuilder {
     // Arrange
     HopsPrincipalBuilder realPB = new HopsPrincipalBuilder();
     HopsPrincipalBuilder pb = Mockito.spy(realPB);
-    Principal originPrincipal = new X500Principal("CN=my_common_name,OU=0,C=SE,O=organization");
+    Principal originPrincipal = new X500Principal("OU=0,C=SE,O=organization,CN=my_common_name");
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
 
-    // Act
+    // Arrange
     Principal p = pb.buildPrincipal(null, null);
 
     // Assert
     Assert.assertNotEquals(originPrincipal, p);
     Assert.assertTrue(p instanceof KafkaPrincipal);
     Assert.assertEquals("my_common_name", p.getName());
+
+    originPrincipal = new X500Principal("CN=another_common_name, OU=0,C=SE,O=organization");
+    Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
+    p = pb.buildPrincipal(null, null);
+    Assert.assertEquals("another_common_name", p.getName());
   }
 }
