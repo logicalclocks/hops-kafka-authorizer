@@ -14,7 +14,6 @@ import org.mockito.Mockito;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 
@@ -32,7 +31,7 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testRejectAnonymous() throws UnknownHostException, ExecutionException {
     // Arrange
-    LoadingCache loadingCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Map<String, List<HopsAcl>>> loadingCache = Mockito.mock(LoadingCache.class);
     Mockito.when(loadingCache.get(anyString())).thenReturn(new HashMap<>());
 
     HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(loadingCache);
@@ -51,7 +50,7 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testSuperUser() throws UnknownHostException, ExecutionException {
     // Arrange
-    LoadingCache loadingCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Map<String, List<HopsAcl>>> loadingCache = Mockito.mock(LoadingCache.class);
     Mockito.when(loadingCache.get(anyString())).thenReturn(new HashMap<>());
 
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
@@ -74,7 +73,7 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testMissingTopic() throws UnknownHostException, ExecutionException {
     // Arrange
-    LoadingCache loadingCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Map<String, List<HopsAcl>>> loadingCache = Mockito.mock(LoadingCache.class);
     Mockito.when(loadingCache.get(anyString())).thenReturn(new HashMap<>());
 
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
@@ -95,7 +94,7 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testMissingPrincipal() throws UnknownHostException, ExecutionException {
     // Arrange
-    LoadingCache loadingCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Map<String, List<HopsAcl>>> loadingCache = Mockito.mock(LoadingCache.class);
     Mockito.when(loadingCache.get(anyString())).thenReturn(new HashMap<>());
 
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
@@ -116,9 +115,9 @@ public class TestHopsAclAuthorizer {
     // Arrange
     HopsAcl hopsAcl = new HopsAcl("test", "project__user", "allow",
         "*", "*", "*", "data owner");
-    Map map = new HashMap<>();
+    Map<String, List<HopsAcl>> map = new HashMap<>();
     map.put(hopsAcl.getPrincipal(), Arrays.asList(hopsAcl));
-    LoadingCache loadingCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Map<String, List<HopsAcl>>> loadingCache = Mockito.mock(LoadingCache.class);
     Mockito.when(loadingCache.get(anyString())).thenReturn(map);
 
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "project__user");
@@ -139,9 +138,9 @@ public class TestHopsAclAuthorizer {
     // Arrange
     HopsAcl hopsAcl = new HopsAcl("test", "project__user", "allow",
         "read", "*", "*", "data owner");
-    Map map = new HashMap<>();
+    Map<String, List<HopsAcl>> map = new HashMap<>();
     map.put(hopsAcl.getPrincipal(), Arrays.asList(hopsAcl));
-    LoadingCache loadingCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Map<String, List<HopsAcl>>> loadingCache = Mockito.mock(LoadingCache.class);
     Mockito.when(loadingCache.get(anyString())).thenReturn(map);
 
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "project__user");
@@ -162,9 +161,9 @@ public class TestHopsAclAuthorizer {
     // Arrange
     HopsAcl hopsAcl = new HopsAcl("test", "project__user", "allow",
         "read", "10.0.2.1", "*", "data owner");
-    Map map = new HashMap<>();
+    Map<String, List<HopsAcl>> map = new HashMap<>();
     map.put(hopsAcl.getPrincipal(), Arrays.asList(hopsAcl));
-    LoadingCache loadingCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Map<String, List<HopsAcl>>> loadingCache = Mockito.mock(LoadingCache.class);
     Mockito.when(loadingCache.get(anyString())).thenReturn(map);
 
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "project__user");
@@ -185,9 +184,9 @@ public class TestHopsAclAuthorizer {
     // Arrange
     HopsAcl hopsAcl = new HopsAcl("test", "project__user", "deny",
         "*", "*", "*", "data owner");
-    Map map = new HashMap<>();
+    Map<String, List<HopsAcl>> map = new HashMap<>();
     map.put(hopsAcl.getPrincipal(), Arrays.asList(hopsAcl));
-    LoadingCache loadingCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Map<String, List<HopsAcl>>> loadingCache = Mockito.mock(LoadingCache.class);
     Mockito.when(loadingCache.get(anyString())).thenReturn(map);
 
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "project__user");
