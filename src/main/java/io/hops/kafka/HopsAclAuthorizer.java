@@ -83,11 +83,6 @@ public class HopsAclAuthorizer implements Authorizer {
     long expireDuration = Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS)));
     aclMapping = CacheBuilder.newBuilder()
         .expireAfterWrite(expireDuration, TimeUnit.MILLISECONDS)
-        .removalListener(removalNotification -> {
-            String topicName = (String) removalNotification.getKey();
-            LOG.info("Invalidating cache for"
-                + " topic: " + topicName);
-          })
         .build(new CacheLoader<String, Map<String, List<HopsAcl>>>() {
           @Override
           public Map<String, List<HopsAcl>> load(String topicName) throws Exception {
