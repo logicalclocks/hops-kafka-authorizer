@@ -14,10 +14,10 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import org.apache.log4j.Logger;
 
@@ -36,7 +36,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
   private DbConnection dbConnection;
 
-  private LoadingCache<String, List<HopsAcl>> aclMapping;
+  private LoadingCache<String, Map<String, List<HopsAcl>>> aclMapping;
 
   public HopsAclAuthorizer() {}
 
@@ -88,9 +88,9 @@ public class HopsAclAuthorizer implements Authorizer {
             LOG.info("Invalidating cache for"
                 + " topic: " + topicName);
           })
-        .build(new CacheLoader<String, List<HopsAcl>>() {
+        .build(new CacheLoader<String, Map<String, List<HopsAcl>>>() {
           @Override
-          public List<HopsAcl> load(String topicName) throws Exception {
+          public Map<String, List<HopsAcl>> load(String topicName) throws Exception {
             return dbConnection.getAcls(topicName);
           }
         });
@@ -144,23 +144,22 @@ public class HopsAclAuthorizer implements Authorizer {
       return true;
     }
 
-    List<HopsAcl> aclList;
+    Map<String, List<HopsAcl>> topicAcls;
     try {
-      aclList = aclMapping.get(topicName);
+      topicAcls = aclMapping.get(topicName);
     } catch (ExecutionException e) {
       LOG.error("Error retrieving acls from mapping", e);
       return false;
     }
 
-    return authorizeProjectUser(operation, resource, host, aclList, projectName__userName);
+    return authorizeProjectUser(operation, resource, host, topicAcls, projectName__userName);
   }
 
   private boolean authorizeProjectUser(Operation operation, Resource resource, String host,
-                                       List<HopsAcl> aclList, String projectName__userName) {
+                                       Map<String, List<HopsAcl>> topicAcls, String projectName__userName) {
 
-    List<HopsAcl> projectUserAcls = aclList.stream()
-        .filter(hopsAcl -> hopsAcl.getPrincipal().equals(projectName__userName)).collect(Collectors.toList());
-    if (projectUserAcls.isEmpty()) {
+    List<HopsAcl> projectUserAcls = topicAcls.get(projectName__userName);
+    if (projectUserAcls == null || projectUserAcls.isEmpty()) {
       LOG.info("For principal: " + projectName__userName
           + ", operation:" + operation
           + ", resource:" + resource

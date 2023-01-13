@@ -8,7 +8,10 @@ import java.sql.Statement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
 import org.apache.log4j.Logger;
 
 /**
@@ -42,12 +45,12 @@ public class DbConnection {
     LOG.info("connection made successfully to:" + dbUrl);
   }
 
-  public List<HopsAcl> getAcls(String topicName) throws SQLException {
+  public Map<String, List<HopsAcl>> getAcls(String topicName) throws SQLException {
     Connection connection = null;
     Statement statement = null;
     ResultSet resultSet = null;
 
-    List<HopsAcl> aclList = new ArrayList<>();
+    Map<String, List<HopsAcl>> topicAcls = new HashMap<>();
 
     try {
       connection = datasource.getConnection();
@@ -64,7 +67,10 @@ public class DbConnection {
             resultSet.getString(Consts.ROLE),
             resultSet.getString(Consts.TEAM_ROLE)
         );
-        aclList.add(acl);
+
+        List<HopsAcl> topicPrincipalAcl = topicAcls.getOrDefault(acl.getPrincipal(), new ArrayList<>());
+        topicPrincipalAcl.add(acl);
+        topicAcls.put(acl.getPrincipal(), topicPrincipalAcl);
       }
     } finally {
       if (statement != null) {
@@ -78,7 +84,7 @@ public class DbConnection {
       }
     }
 
-    return aclList;
+    return topicAcls;
   }
 
   /**
