@@ -28,6 +28,11 @@ public class DbConnection {
       "WHERE topic_name = '%s'";
 
   private final HikariDataSource datasource;
+
+  // For testing
+  protected DbConnection(HikariDataSource datasource) {
+    this.datasource = datasource;
+  }
   
   public DbConnection(String dbUrl, String dbUserName, String dbPassword, int maximumPoolSize,
                       String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit)
