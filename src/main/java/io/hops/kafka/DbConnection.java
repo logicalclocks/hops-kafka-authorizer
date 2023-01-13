@@ -46,7 +46,7 @@ public class DbConnection {
   }
 
   public Map<String, List<HopsAcl>> getAcls(String topicName) throws SQLException {
-    int tries = 1;
+    int tries = 2;
 
     Connection connection = null;
     Statement statement = null;
@@ -80,7 +80,6 @@ public class DbConnection {
         LOG.error("Exception during the retrieval of acls for topic: '" + topicName + "'," +
             "retries left: " + tries, e);
         tries--;
-        topicAcls = new HashMap<>();
       } finally {
         if (statement != null) {
           statement.close();
