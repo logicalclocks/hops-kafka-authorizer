@@ -36,6 +36,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
   private DbConnection dbConnection;
 
+  //<TopicName,<Principal,HopsAcl>>
   private LoadingCache<String, Map<String, List<HopsAcl>>> aclMapping;
 
   public HopsAclAuthorizer() {}

@@ -4,7 +4,7 @@ import io.hops.kafka.authorizer.tables.HopsAcl;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
-import java.sql.Statement;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -25,7 +25,7 @@ public class DbConnection {
   private static final String SQL_COMMAND_SPECIFIC = "SELECT acls.*, project_team.team_role " +
       "FROM topic_acls as acls " +
       "JOIN project_team ON acls.project_id = project_team.project_id AND acls.username = project_team.team_member " +
-      "WHERE topic_name = '%s'";
+      "WHERE topic_name = ?";
 
   private final HikariDataSource datasource;
 
@@ -54,7 +54,7 @@ public class DbConnection {
     int tries = 2;
 
     Connection connection = null;
-    Statement statement = null;
+    PreparedStatement preparedStatement = null;
     ResultSet resultSet = null;
 
     Map<String, List<HopsAcl>> topicAcls = new HashMap<>();
@@ -62,9 +62,9 @@ public class DbConnection {
     while (tries > 0) {
       try {
         connection = datasource.getConnection();
-        statement = connection.createStatement();
-        String command = String.format(SQL_COMMAND_SPECIFIC, topicName);
-        resultSet = statement.executeQuery(command);
+        preparedStatement = connection.prepareStatement(SQL_COMMAND_SPECIFIC);
+        preparedStatement.setString(1, topicName);
+        resultSet = preparedStatement.executeQuery();
 
         while (resultSet.next()) {
           HopsAcl acl = new HopsAcl(resultSet.getString(Consts.TOPIC_NAME),
@@ -86,8 +86,8 @@ public class DbConnection {
             "retries left: " + tries, e);
         tries--;
       } finally {
-        if (statement != null) {
-          statement.close();
+        if (preparedStatement != null) {
+          preparedStatement.close();
         }
         if (resultSet != null) {
           resultSet.close();
