@@ -25,32 +25,48 @@ public class TestHopsPrincipalBuilder {
 
   @Test
   public void testNonX500Principal() throws Exception {
+    // Arrange
     HopsPrincipalBuilder realPB = new HopsPrincipalBuilder();
     HopsPrincipalBuilder pb = Mockito.spy(realPB);
     Principal originPrincipal = new HttpPrincipal("kafka", "name");
 
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
+
+    // Act
     Principal p = pb.buildPrincipal(null, null);
+
+    // Assert
     Assert.assertEquals(originPrincipal, p);
   }
 
   @Test
   public void testAnonymousX500Principal() throws Exception {
+    // Arrange
     HopsPrincipalBuilder realPB = new HopsPrincipalBuilder();
     HopsPrincipalBuilder pb = Mockito.spy(realPB);
     Principal originPrincipal = new KafkaPrincipal("kafka", Consts.ANONYMOUS);
+
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
+
+    // Act
     Principal p = pb.buildPrincipal(null, null);
+
+    // Assert
     Assert.assertEquals(originPrincipal, p);
   }
 
   @Test
   public void testX500Principle() throws Exception {
+    // Arrange
     HopsPrincipalBuilder realPB = new HopsPrincipalBuilder();
     HopsPrincipalBuilder pb = Mockito.spy(realPB);
     Principal originPrincipal = new X500Principal("OU=0,C=SE,O=organization,CN=my_common_name");
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
+
+    // Arrange
     Principal p = pb.buildPrincipal(null, null);
+
+    // Assert
     Assert.assertNotEquals(originPrincipal, p);
     Assert.assertTrue(p instanceof KafkaPrincipal);
     Assert.assertEquals("my_common_name", p.getName());
