@@ -42,8 +42,7 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
    * In our case it will be, principalType:projectName__userName.
    */
   @Override
-  public Principal buildPrincipal(TransportLayer transportLayer,
-      Authenticator authenticator) throws KafkaException {
+  public Principal buildPrincipal(TransportLayer transportLayer, Authenticator authenticator) throws KafkaException {
     try {
       Principal principal = getPrincipal(transportLayer);
 
@@ -52,14 +51,14 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
         return principal;
       }
 
-      String TLSUserName = principal.getName();
-      if (TLSUserName.equalsIgnoreCase(Consts.ANONYMOUS)) {
+      String tlsUserName = principal.getName();
+      if (tlsUserName.equalsIgnoreCase(Consts.ANONYMOUS)) {
         return principal;
       }
 
       String userType = principal.toString().split(Consts.COLON_SEPARATOR)[0];
-      X500Name name = new X500Name(TLSUserName);
-      String principleName = name.getCommonName();
+      X500Name name = new X500Name(tlsUserName);
+      String principleName = name.getCommonName(); // todo isn't principal.getName() == name.getCommonName()?
       return new KafkaPrincipal(userType, principleName);
     } catch (IOException e) {
       throw new KafkaException("Failed to build Kafka principal due to: ", e);
