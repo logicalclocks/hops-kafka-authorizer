@@ -11,7 +11,6 @@ import kafka.security.auth.Operation;
 import kafka.security.auth.Resource;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
-import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
