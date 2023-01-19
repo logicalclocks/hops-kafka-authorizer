@@ -4,13 +4,14 @@ import io.hops.kafka.authorizer.tables.HopsAcl;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
-import java.sql.Statement;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 import org.apache.log4j.Logger;
 
 /**
@@ -21,14 +22,17 @@ public class DbConnection {
   
   private static final Logger LOG = Logger.getLogger(DbConnection.class.getName());
 
-  private static final String SQL_COMMAND = "SELECT DISTINCT acls.*,project_team.team_role "
-      + "FROM topic_acls as acls, users, project_team "
-      + "WHERE project_team.project_id = acls.project_id "
-      + "AND project_team.team_member = users.email "
-      + "AND users.username = substring_index(principal, '" + Consts.PROJECT_USER_DELIMITER + "', -1) "
-      + "ORDER BY topic_name, principal";
+  private static final String SQL_COMMAND_SPECIFIC = "SELECT acls.*, project_team.team_role " +
+      "FROM topic_acls as acls " +
+      "JOIN project_team ON acls.project_id = project_team.project_id AND acls.username = project_team.team_member " +
+      "WHERE topic_name = ?";
 
-  private HikariDataSource datasource = null;
+  private final HikariDataSource datasource;
+
+  // For testing
+  protected DbConnection(HikariDataSource datasource) {
+    this.datasource = datasource;
+  }
   
   public DbConnection(String dbUrl, String dbUserName, String dbPassword, int maximumPoolSize,
                       String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit)
@@ -46,47 +50,55 @@ public class DbConnection {
     LOG.info("connection made successfully to:" + dbUrl);
   }
 
-  public Map<String, Map<String, List<HopsAcl>>> getAcls() throws SQLException {
+  public Map<String, List<HopsAcl>> getAcls(String topicName) throws SQLException {
+    int tries = 2;
+
     Connection connection = null;
-    Statement statement = null;
+    PreparedStatement preparedStatement = null;
     ResultSet resultSet = null;
 
-    Map<String, Map<String, List<HopsAcl>>> newAcls = new HashMap<>();
+    Map<String, List<HopsAcl>> topicAcls = new HashMap<>();
 
-    try {
-      connection = datasource.getConnection();
-      statement = connection.createStatement();
-      resultSet = statement.executeQuery(SQL_COMMAND);
+    while (tries > 0) {
+      try {
+        connection = datasource.getConnection();
+        preparedStatement = connection.prepareStatement(SQL_COMMAND_SPECIFIC);
+        preparedStatement.setString(1, topicName);
+        resultSet = preparedStatement.executeQuery();
 
-      while (resultSet.next()) {
-        HopsAcl acl = new HopsAcl(resultSet.getString(Consts.TOPIC_NAME),
-            resultSet.getString(Consts.PRINCIPAL),
-            resultSet.getString(Consts.PERMISSION_TYPE),
-            resultSet.getString(Consts.OPERATION_TYPE),
-            resultSet.getString(Consts.HOST),
-            resultSet.getString(Consts.ROLE),
-            resultSet.getString(Consts.TEAM_ROLE)
-        );
+        while (resultSet.next()) {
+          HopsAcl acl = new HopsAcl(resultSet.getString(Consts.TOPIC_NAME),
+              resultSet.getString(Consts.PRINCIPAL),
+              resultSet.getString(Consts.PERMISSION_TYPE),
+              resultSet.getString(Consts.OPERATION_TYPE),
+              resultSet.getString(Consts.HOST),
+              resultSet.getString(Consts.ROLE),
+              resultSet.getString(Consts.TEAM_ROLE)
+          );
 
-        Map<String, List<HopsAcl>> topicAcls = newAcls.getOrDefault(acl.getTopicName(), new HashMap<>());
-        List<HopsAcl> topicPrincipalAcl = topicAcls.getOrDefault(acl.getPrincipal(), new ArrayList<>());
-        topicPrincipalAcl.add(acl);
-        topicAcls.put(acl.getPrincipal(), topicPrincipalAcl);
-        newAcls.put(acl.getTopicName(), topicAcls);
-      }
-    } finally {
-      if (statement != null) {
-        statement.close();
-      }
-      if (resultSet != null) {
-        resultSet.close();
-      }
-      if (connection != null) {
-        connection.close();
+          List<HopsAcl> topicPrincipalAcl = topicAcls.getOrDefault(acl.getPrincipal(), new ArrayList<>());
+          topicPrincipalAcl.add(acl);
+          topicAcls.put(acl.getPrincipal(), topicPrincipalAcl);
+        }
+        break;
+      } catch (Exception e) {
+        LOG.error("Exception during the retrieval of acls for topic: '" + topicName + "'," +
+            "retries left: " + tries, e);
+        tries--;
+      } finally {
+        if (preparedStatement != null) {
+          preparedStatement.close();
+        }
+        if (resultSet != null) {
+          resultSet.close();
+        }
+        if (connection != null) {
+          connection.close();
+        }
       }
     }
 
-    return newAcls;
+    return topicAcls;
   }
 
   /**
