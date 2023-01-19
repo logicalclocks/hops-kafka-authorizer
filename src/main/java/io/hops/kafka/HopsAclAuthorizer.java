@@ -31,8 +31,12 @@ public class HopsAclAuthorizer implements Authorizer {
   
   private static final Logger LOG = Logger.getLogger("kafka.authorizer.logger");
   //List of users that will be treated as superusers and will have access to
-  //all the resources for all actions from all osts, defaults to no super users.
+  //all the resources for all actions from all osts, defaults to no superusers.
   private Set<KafkaPrincipal> superUsers = new HashSet<>();
+  private static final String AUTHORIZE_MESSAGE = "For principal: %s"
+      + ", operation: %s"
+      + ", resource: %s"
+      + ", %s";
 
   private DbConnection dbConnection;
 
@@ -42,7 +46,7 @@ public class HopsAclAuthorizer implements Authorizer {
   public HopsAclAuthorizer() {}
 
   // For testing
-  protected HopsAclAuthorizer(LoadingCache loadingCache) {
+  protected HopsAclAuthorizer(LoadingCache<String, Map<String, List<HopsAcl>>> loadingCache) {
     aclMapping = loadingCache;
   }
 
@@ -65,21 +69,16 @@ public class HopsAclAuthorizer implements Authorizer {
     } else {
       superUsers = new HashSet<>();
     }
-    
-    try {
-      //initialize database connection.
-      dbConnection = new DbConnection(
-          configs.get(Consts.DATABASE_URL).toString(),
-          configs.get(Consts.DATABASE_USERNAME).toString(),
-          configs.get(Consts.DATABASE_PASSWORD).toString(),
-          Integer.parseInt(configs.get(Consts.DATABASE_MAX_POOL_SIZE).toString()),
-          configs.get(Consts.DATABASE_CACHE_PREPSTMTS).toString(),
-          configs.get(Consts.DATABASE_PREPSTMT_CACHE_SIZE).toString(),
-          configs.get(Consts.DATABASE_PREPSTMT_CACHE_SQL_LIMIT).toString());
-    } catch (SQLException ex) {
-      LOG.error("HopsAclAuthorizer could not connect to database at:" + configs.get(Consts.DATABASE_URL).toString(),
-          ex);
-    }
+
+    //initialize database connection.
+    dbConnection = new DbConnection(
+        configs.get(Consts.DATABASE_URL).toString(),
+        configs.get(Consts.DATABASE_USERNAME).toString(),
+        configs.get(Consts.DATABASE_PASSWORD).toString(),
+        Integer.parseInt(configs.get(Consts.DATABASE_MAX_POOL_SIZE).toString()),
+        configs.get(Consts.DATABASE_CACHE_PREPSTMTS).toString(),
+        configs.get(Consts.DATABASE_PREPSTMT_CACHE_SIZE).toString(),
+        configs.get(Consts.DATABASE_PREPSTMT_CACHE_SQL_LIMIT).toString());
 
     long expireDuration = Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS)));
     aclMapping = CacheBuilder.newBuilder()
@@ -97,19 +96,18 @@ public class HopsAclAuthorizer implements Authorizer {
     KafkaPrincipal principal = session.principal();
     String host = session.clientAddress().getHostAddress();
     String topicName = resource.name();
-    String projectName__userName = principal.getName();
+    String principalName = principal.getName();
   
     LOG.debug("authorize :: session:" + session);
-    LOG.debug("authorize :: principal.name:" + principal.getName());
+    LOG.debug("authorize :: principal.name:" + principalName);
     LOG.debug("authorize :: principal.type:" + principal.getPrincipalType());
     LOG.debug("authorize :: operation:" + operation);
     LOG.debug("authorize :: host:" + host);
     LOG.debug("authorize :: resource:" + resource);
     LOG.debug("authorize :: topicName:" + topicName);
-    LOG.debug("authorize :: projectName__userName:" + projectName__userName);
     
-    if (projectName__userName.equalsIgnoreCase(Consts.ANONYMOUS)) {
-      LOG.info("No Acl found for cluster authorization, user:" + projectName__userName);
+    if (principalName.equalsIgnoreCase(Consts.ANONYMOUS)) {
+      LOG.info("No Acl found for cluster authorization, user:" + principalName);
       return false;
     }
     
@@ -119,24 +117,24 @@ public class HopsAclAuthorizer implements Authorizer {
     
     if (resource.resourceType().equals(
         kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.CLUSTER))) {
-      LOG.info("This is cluster authorization for broker: " + projectName__userName);
+      LOG.info("This is cluster authorization for broker: " + principalName);
       return false;
     }
     if (resource.resourceType().equals(
         kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.GROUP))) {
       //Check if group requested starts with projectname__ and is equal to the current users project
-      String projectCN = projectName__userName.split(Consts.PROJECT_USER_DELIMITER)[0];
+      String projectCN = principalName.split(Consts.PROJECT_USER_DELIMITER)[0];
       if (resource.name().contains(Consts.PROJECT_USER_DELIMITER)) {
         String projectConsumerGroup = resource.name().split(Consts.PROJECT_USER_DELIMITER)[0];
         LOG.debug("Consumer group :: projectCN:" + projectCN);
         LOG.debug("Consumer group :: projectConsumerGroup:" + projectConsumerGroup);
         //Chec
         if (!projectCN.equals(projectConsumerGroup)) {
-          LOG.info("Principal:" + projectName__userName + " is not allowed to access group:" + resource.name());
+          LOG.info("Principal:" + principalName + " is not allowed to access group:" + resource.name());
           return false;
         }
       }
-      LOG.info("Principal:" + projectName__userName + " is allowed to access group:" + resource.name());
+      LOG.info("Principal:" + principalName + " is allowed to access group:" + resource.name());
       return true;
     }
 
@@ -148,33 +146,28 @@ public class HopsAclAuthorizer implements Authorizer {
       return false;
     }
 
-    return authorizeProjectUser(operation, resource, host, topicAcls, projectName__userName);
+    return authorizeProjectUser(operation, resource, host, topicAcls, principalName);
   }
 
   private boolean authorizeProjectUser(Operation operation, Resource resource, String host,
-                                       Map<String, List<HopsAcl>> topicAcls, String projectName__userName) {
+                                       Map<String, List<HopsAcl>> topicAcls, String principalName) {
 
-    List<HopsAcl> projectUserAcls = topicAcls.get(projectName__userName);
+    List<HopsAcl> projectUserAcls = topicAcls.get(principalName);
     if (projectUserAcls == null || projectUserAcls.isEmpty()) {
-      LOG.info("For principal: " + projectName__userName
-          + ", operation:" + operation
-          + ", resource:" + resource
-          + ", allowMatch: false - no ACL found");
+      LOG.info(String.format(AUTHORIZE_MESSAGE, principalName, operation, resource, "match: false - no ACL found"));
       return false;
     }
 
     //check if there is any Deny acl match that would disallow this operation.
-    boolean denyMatch = aclMatch(operation.name(), projectName__userName,
+    boolean denyMatch = aclMatch(operation.name(), principalName,
         host, Consts.DENY, projectUserAcls.get(0).getProjectRole(), projectUserAcls);
 
-    LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
-        + ", denyMatch:" + denyMatch);
+    LOG.info(String.format(AUTHORIZE_MESSAGE, principalName, operation, resource, "denyMatch: " + denyMatch));
 
-    boolean allowMatch = aclMatch(operation.name(), projectName__userName,
+    boolean allowMatch = aclMatch(operation.name(), principalName,
         host, Consts.ALLOW, projectUserAcls.get(0).getProjectRole(), projectUserAcls);
 
-    LOG.info("For principal: " + projectName__userName + ", operation:" + operation + ", resource:" + resource
-        + ", allowMatch:" + allowMatch);
+    LOG.info(String.format(AUTHORIZE_MESSAGE, principalName, operation, resource, "allowMatch: " + allowMatch));
 
     return !denyMatch && allowMatch;
   }
@@ -228,7 +221,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
   @Override
   public scala.collection.immutable.Set<Acl> getAcls(Resource resource) {
-    return null;
+    return new scala.collection.immutable.HashSet<>();
   }
 
   @Override
