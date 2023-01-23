@@ -220,7 +220,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
   @Override
   public scala.collection.immutable.Set<Acl> getAcls(Resource resource) {
-    return new scala.collection.immutable.HashSet<>();
+    return null;
   }
 
   @Override
