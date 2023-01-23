@@ -58,7 +58,7 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
 
       String userType = principal.toString().split(Consts.COLON_SEPARATOR)[0];
       X500Name name = new X500Name(tlsUserName);
-      String principleName = name.getCommonName(); // todo isn't principal.getName() == name.getCommonName()?
+      String principleName = name.getCommonName();
       return new KafkaPrincipal(userType, principleName);
     } catch (IOException e) {
       throw new KafkaException("Failed to build Kafka principal due to: ", e);
