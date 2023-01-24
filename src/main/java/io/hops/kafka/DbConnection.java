@@ -35,8 +35,7 @@ public class DbConnection {
   }
   
   public DbConnection(String dbUrl, String dbUserName, String dbPassword, int maximumPoolSize,
-                      String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit)
-      throws SQLException {
+                      String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit) {
     LOG.info("Initializing database pool to:" + dbUrl);
     HikariConfig config = new HikariConfig();
     config.setJdbcUrl("jdbc:mysql://" + dbUrl);

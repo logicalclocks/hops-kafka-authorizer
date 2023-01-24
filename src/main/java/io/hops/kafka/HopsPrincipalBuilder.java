@@ -32,19 +32,17 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
 
   @Override
   public void configure(Map<String, ?> configs) {
-
   }
 
   /*
-   * By default, the TLS user name will be of the form
+   * By default, the TLS username will be of the form
    * "CN=host1.example.com,OU=,O=Confluent,L=London,ST=London,C=GB".
    * The order of the fields of the X500 name IS NOT GUARANTEED
    * This builder class extracts host1.example.com.
    * In our case it will be, principalType:projectName__userName.
    */
   @Override
-  public Principal buildPrincipal(TransportLayer transportLayer,
-      Authenticator authenticator) throws KafkaException {
+  public Principal buildPrincipal(TransportLayer transportLayer, Authenticator authenticator) throws KafkaException {
     try {
       Principal principal = getPrincipal(transportLayer);
 
@@ -53,15 +51,15 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
         return principal;
       }
 
-      String TLSUserName = principal.getName();
-      if (TLSUserName.equalsIgnoreCase(Consts.ANONYMOUS)) {
+      String tlsUserName = principal.getName();
+      if (tlsUserName.equalsIgnoreCase(Consts.ANONYMOUS)) {
         return principal;
       }
 
       String userType = principal.toString().split(Consts.COLON_SEPARATOR)[0];
-      X500Name name = new X500Name(TLSUserName);
-      String projectName__userName = name.getCommonName();
-      return new KafkaPrincipal(userType, projectName__userName);
+      X500Name name = new X500Name(tlsUserName);
+      String principleName = name.getCommonName();
+      return new KafkaPrincipal(userType, principleName);
     } catch (IOException e) {
       throw new KafkaException("Failed to build Kafka principal due to: ", e);
     }

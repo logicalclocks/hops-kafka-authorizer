@@ -1,11 +1,14 @@
 package io.hops.kafka;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.anyString;
@@ -31,7 +34,7 @@ public class TestDbConnection {
     Map map = dbConnection.getAcls("test_topic");
 
     // Assert
-    Assert.assertEquals(1, map.size());
+    Assertions.assertEquals(1, map.size());
     Mockito.verify(datasource, Mockito.times(1)).getConnection();
     Mockito.verify(connection, Mockito.times(1)).close();
     Mockito.verify(preparedStatement, Mockito.times(1)).close();
@@ -57,7 +60,7 @@ public class TestDbConnection {
     Map map = dbConnection.getAcls("test_topic");
 
     // Assert
-    Assert.assertEquals(1, map.size());
+    Assertions.assertEquals(1, map.size());
     Mockito.verify(datasource, Mockito.times(2)).getConnection();
     Mockito.verify(connection, Mockito.times(2)).close();
     Mockito.verify(preparedStatement, Mockito.times(2)).close();
@@ -83,7 +86,7 @@ public class TestDbConnection {
     Map map = dbConnection.getAcls("test_topic");
 
     // Assert
-    Assert.assertEquals(0, map.size());
+    Assertions.assertEquals(0, map.size());
     Mockito.verify(datasource, Mockito.times(2)).getConnection();
     Mockito.verify(connection, Mockito.times(2)).close();
     Mockito.verify(preparedStatement, Mockito.times(2)).close();

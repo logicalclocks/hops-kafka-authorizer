@@ -6,7 +6,7 @@ package io.hops.kafka.authorizer.tables;
  */
 public class HopsAcl {
 
-  int Id;
+  int id;
   String topicName;
   String principal;
   String permissionType;
@@ -70,11 +70,11 @@ public class HopsAcl {
   }
 
   public int getId() {
-    return Id;
+    return id;
   }
 
-  public void setId(int Id) {
-    this.Id = Id;
+  public void setId(int id) {
+    this.id = id;
   }
 
   public String getTopicName() {

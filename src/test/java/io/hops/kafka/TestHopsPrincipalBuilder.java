@@ -14,8 +14,8 @@ package io.hops.kafka;
 
 import com.sun.net.httpserver.HttpPrincipal;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import javax.security.auth.x500.X500Principal;
@@ -36,7 +36,7 @@ public class TestHopsPrincipalBuilder {
     Principal p = pb.buildPrincipal(null, null);
 
     // Assert
-    Assert.assertEquals(originPrincipal, p);
+    Assertions.assertEquals(originPrincipal, p);
   }
 
   @Test
@@ -52,7 +52,7 @@ public class TestHopsPrincipalBuilder {
     Principal p = pb.buildPrincipal(null, null);
 
     // Assert
-    Assert.assertEquals(originPrincipal, p);
+    Assertions.assertEquals(originPrincipal, p);
   }
 
   @Test
@@ -67,13 +67,13 @@ public class TestHopsPrincipalBuilder {
     Principal p = pb.buildPrincipal(null, null);
 
     // Assert
-    Assert.assertNotEquals(originPrincipal, p);
-    Assert.assertTrue(p instanceof KafkaPrincipal);
-    Assert.assertEquals("my_common_name", p.getName());
+    Assertions.assertNotEquals(originPrincipal, p);
+    Assertions.assertTrue(p instanceof KafkaPrincipal);
+    Assertions.assertEquals("my_common_name", p.getName());
 
     originPrincipal = new X500Principal("CN=another_common_name, OU=0,C=SE,O=organization");
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
     p = pb.buildPrincipal(null, null);
-    Assert.assertEquals("another_common_name", p.getName());
+    Assertions.assertEquals("another_common_name", p.getName());
   }
 }
