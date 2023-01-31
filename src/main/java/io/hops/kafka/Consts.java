@@ -15,21 +15,19 @@ public final class Consts {
   public static final String ANONYMOUS = "ANONYMOUS";
 
   //Operations
-  public static final String ALLOW = "Allow";
-  public static final String DENY = "Deny";
   public static final String READ = "Read";
   public static final String WRITE = "Write";
   public static final String DESCRIBE = "Describe";
-  public static final String ALL = "All";
 
-  public static final String PRINCIPAL = "principal";
-  public static final String PERMISSION_TYPE = "permission_type";
-  public static final String OPERATION_TYPE = "operation_type";
-  public static final String HOST = "host";
-  public static final String ROLE = "role";
-  public static final String TOPIC_NAME = "topic_name";
-  public static final String TEAM_ROLE = "team_role";
-  
+  //User roles
+  public static final String DATA_OWNER = "Data owner";
+  public static final String DATA_SCIENTIST = "Data scientist";
+
+  //Project permissions
+  public static final String EDITABLE = "EDITABLE";
+  public static final String READ_ONLY = "READ_ONLY";
+  public static final String EDITABLE_BY_OWNERS = "EDITABLE_BY_OWNERS";
+
   //Resource Types
   public static final String CLUSTER = "Cluster";
   public static final String TOPIC = "Topic";
@@ -38,10 +36,8 @@ public final class Consts {
 
   //Properties attributes
   public static final String SUPERUSERS_PROP = "super.users";
-  public static final String ALLOW_EVERYONE_IF_NO_ACS_FOUND_PROP = "allow.everyone.if.no.acl.found";
 
   //Database property names
-  public static final String DATABASE_TYPE = "database.type";
   public static final String DATABASE_URL = "database.url";
   public static final String DATABASE_USERNAME = "database.username";
   public static final String DATABASE_PASSWORD = "database.password";
