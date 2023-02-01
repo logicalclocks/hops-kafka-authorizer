@@ -18,20 +18,20 @@ public class DbConnection {
   
   private static final Logger LOG = Logger.getLogger(DbConnection.class.getName());
 
-  private static final String SQL_SELECT_TOPIC_PROJECT = "SELECT project_id " +
-      "FROM project_topics " +
-      "WHERE topic_name = ?";
+  private static final String SQL_SELECT_TOPIC_PROJECT = "SELECT pt.project_id " +
+      "FROM project_topics pt " +
+      "WHERE pt.topic_name = ?";
 
-  private static final String SQL_SELECT_PROJECT_ROLE = "SELECT project.id, project_team.team_role " +
-      "FROM project_team " +
-      "JOIN project ON project_team.project_id = project.id " +
-      "JOIN users ON project_team.team_member = users.email " +
-      "WHERE project.projectname = ? and users.username = ?";
+  private static final String SQL_SELECT_PROJECT_ROLE = "SELECT p.id, pt.team_role " +
+      "FROM project_team pt " +
+      "JOIN project p ON pt.project_id = p.id " +
+      "JOIN users u ON pt.team_member = u.email " +
+      "WHERE p.projectname = ? and u.username = ?";
 
-  private static final String SQL_SELECT_SHARED_PROJECT = "SELECT dataset_shared_with.permission " +
-      "FROM dataset_shared_with " +
-      "JOIN dataset ON dataset_shared_with.dataset = dataset.id " +
-      "WHERE dataset.feature_store_id IS NOT NULL and dataset_shared_with.project = ? and dataset.projectId = ?";
+  private static final String SQL_SELECT_SHARED_PROJECT = "SELECT dsw.permission " +
+      "FROM dataset_shared_with dsw " +
+      "JOIN dataset d ON dsw.dataset = d.id " +
+      "WHERE d.feature_store_id IS NOT NULL and dsw.project = ? and d.projectId = ?";
 
   private final HikariDataSource datasource;
 
