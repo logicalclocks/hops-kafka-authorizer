@@ -26,12 +26,12 @@ public class DbConnection {
       "FROM project_team pt " +
       "JOIN project p ON pt.project_id = p.id " +
       "JOIN users u ON pt.team_member = u.email " +
-      "WHERE p.projectname = ? and u.username = ?";
+      "WHERE p.projectname = ? AND u.username = ?";
 
   private static final String SQL_SELECT_SHARED_PROJECT = "SELECT dsw.permission " +
       "FROM dataset_shared_with dsw " +
       "JOIN dataset d ON dsw.dataset = d.id " +
-      "WHERE d.feature_store_id IS NOT NULL and dsw.project = ? and d.projectId = ?";
+      "WHERE d.feature_store_id IS NOT NULL AND dsw.project = ? AND d.projectId = ?";
 
   private final HikariDataSource datasource;
 
