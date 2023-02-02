@@ -85,8 +85,7 @@ public class HopsAclAuthorizer implements Authorizer {
         .build(new CacheLoader<String, Integer>() {
           @Override
           public Integer load(String topicName) throws SQLException {
-            // todo instead of querying db the topics project id could be received from topic name
-            LOG.info(String.format("getting topics project for: %s", topicName));
+            LOG.info(String.format("Getting topics project. topicName: %s", topicName));
             return dbConnection.getTopicProject(topicName);
           }
         });
@@ -95,9 +94,10 @@ public class HopsAclAuthorizer implements Authorizer {
         .build(new CacheLoader<String, Pair<Integer, String>>() {
           @Override
           public Pair<Integer, String> load(String principalName) throws SQLException {
-            String projectName = principalName.split(Consts.PROJECT_USER_DELIMITER)[0];
-            String username = principalName.split(Consts.PROJECT_USER_DELIMITER)[1];
-            LOG.info(String.format("getting users project role for: %s , %s", projectName, username));
+            String[] principalNameSplit = principalName.split(Consts.PROJECT_USER_DELIMITER);
+            String projectName = principalNameSplit[0];
+            String username = principalNameSplit[1];
+            LOG.info(String.format("Getting users project role. projectName: %s, username: %s", projectName, username));
             return dbConnection.getProjectRole(projectName, username);
           }
         });
@@ -108,7 +108,8 @@ public class HopsAclAuthorizer implements Authorizer {
           public String load(Pair<Integer, Integer> pair) throws SQLException {
             int topicProjectId = pair.getValue0();
             int userProjectId = pair.getValue1();
-            LOG.info(String.format("getting project share permission: %s , %s", topicProjectId, userProjectId));
+            LOG.info(String.format("Getting project share permission. topicProjectId: %s, userProjectId: %s",
+                topicProjectId, userProjectId));
             return dbConnection.getSharedProject(userProjectId, topicProjectId);
           }
         });
