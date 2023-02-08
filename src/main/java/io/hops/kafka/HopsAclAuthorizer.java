@@ -34,8 +34,11 @@ public class HopsAclAuthorizer implements Authorizer {
 
   private DbConnection dbConnection;
 
+  // topicName -> topicProjectId
   private LoadingCache<String, Integer> topicProject;
+  // principalName (aka. projectName__username) -> userProjectId, userRole
   private LoadingCache<String, Pair<Integer, String>> userProject;
+  // userProjectId, topicProjectId -> sharePermission
   private LoadingCache<Pair<Integer, Integer>, String> projectShare;
 
   public HopsAclAuthorizer() {}
