@@ -191,7 +191,7 @@ public class HopsAclAuthorizer implements Authorizer {
       } catch (ExecutionException e) {
         tries--;
         LOG.error(String.format("Failed to authorize user '%s' to perform '%s' on topic '%s', retries left: %s",
-            principalName, operation.toString(), topicName, tries), e);
+            principalName, operation.toString(), topicName, tries), e.getCause());
       }
     }
     return false;
