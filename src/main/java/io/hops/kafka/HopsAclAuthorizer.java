@@ -38,7 +38,7 @@ public class HopsAclAuthorizer implements Authorizer {
   private LoadingCache<String, Integer> topicProject;
   // principalName (aka. projectName__username) -> userProjectId, userRole
   private LoadingCache<String, Pair<Integer, String>> userProject;
-  // userProjectId, topicProjectId -> sharePermission
+  // topicProjectId, userProjectId -> sharePermission
   private LoadingCache<Pair<Integer, Integer>, String> projectShare;
 
   public HopsAclAuthorizer() {}
@@ -185,7 +185,7 @@ public class HopsAclAuthorizer implements Authorizer {
           return authorizeOperation(operation, userRole);
         } else {
           // Working on the shared project
-          String sharePermission = projectShare.get(new Pair<>(userProjectId, topicProjectId));
+          String sharePermission = projectShare.get(new Pair<>(topicProjectId, userProjectId));
           return authorizePermission(operation, sharePermission);
         }
       } catch (ExecutionException e) {
