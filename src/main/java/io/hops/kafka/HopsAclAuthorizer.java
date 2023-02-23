@@ -29,11 +29,8 @@ public class HopsAclAuthorizer implements Authorizer {
   
   private static final Logger LOG = Logger.getLogger("kafka.authorizer.logger");
   //List of users that will be treated as superusers and will have access to
-  //all the resources for all actions from all posts, defaults to no superusers.
+  //all the resources for all actions from all osts, defaults to no superusers.
   private Set<KafkaPrincipal> superUsers = new HashSet<>();
-
-  //List of forbidden topics, only superusers can work with them.
-  private Set<String> forbiddenTopics = new HashSet<>();
 
   private DbConnection dbConnection;
 
@@ -62,20 +59,17 @@ public class HopsAclAuthorizer implements Authorizer {
    */
   @Override
   public void configure(java.util.Map<String, ?> configs) {
-    Object superUserObj = configs.get(Consts.SUPERUSERS_PROP);
-    if (superUserObj != null) {
-      String superUsersStr = (String) superUserObj;
-      for (String user : superUsersStr.split(Consts.SEMI_COLON)) {
+    Object obj = configs.get(Consts.SUPERUSERS_PROP);
+    
+    if (obj != null) {
+      String superUsersStr = (String) obj;
+      String[] superUserStrings = superUsersStr.split(Consts.SEMI_COLON);
+      
+      for (String user : superUserStrings) {
         superUsers.add(KafkaPrincipal.fromString(user.trim()));
       }
-    }
-
-    Object forbiddenTopicObj = configs.get(Consts.FORBIDDEN_TOPICS);
-    if (forbiddenTopicObj != null) {
-      String forbiddenTopicsStr = (String) forbiddenTopicObj;
-      for (String forbiddenTopic : forbiddenTopicsStr.split(Consts.SEMI_COLON)) {
-        forbiddenTopics.add(forbiddenTopic.trim());
-      }
+    } else {
+      superUsers = new HashSet<>();
     }
 
     //initialize database connection.
@@ -146,8 +140,6 @@ public class HopsAclAuthorizer implements Authorizer {
     
     if (isSuperUser(principal)) {
       return true;
-    } else if (isForbiddenTopic(topicName)) {
-      return false;
     }
     
     if (resource.resourceType().equals(
@@ -234,15 +226,6 @@ public class HopsAclAuthorizer implements Authorizer {
       return true;
     }
     LOG.debug("principal = " + principal + " is not a super user.");
-    return false;
-  }
-
-  private boolean isForbiddenTopic(String topicName) {
-    if (forbiddenTopics.contains(topicName)) {
-      LOG.debug("topic = " + topicName + " is forbidden.");
-      return true;
-    }
-    LOG.debug("topic = " + topicName + " is not forbidden.");
     return false;
   }
 
