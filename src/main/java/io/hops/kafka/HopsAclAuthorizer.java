@@ -29,8 +29,10 @@ public class HopsAclAuthorizer implements Authorizer {
   
   private static final Logger LOG = Logger.getLogger("kafka.authorizer.logger");
   //List of users that will be treated as superusers and will have access to
-  //all the resources for all actions from all osts, defaults to no superusers.
+  //all the resources for all actions from all posts, defaults to no superusers.
   private Set<KafkaPrincipal> superUsers = new HashSet<>();
+  //Identifies if work with __consumer_offsets topic is allowed.
+  private boolean consumerOffsetsEnabled = false;
 
   private DbConnection dbConnection;
 
@@ -59,17 +61,17 @@ public class HopsAclAuthorizer implements Authorizer {
    */
   @Override
   public void configure(java.util.Map<String, ?> configs) {
-    Object obj = configs.get(Consts.SUPERUSERS_PROP);
-    
-    if (obj != null) {
-      String superUsersStr = (String) obj;
-      String[] superUserStrings = superUsersStr.split(Consts.SEMI_COLON);
-      
-      for (String user : superUserStrings) {
+    Object superUserObj = configs.get(Consts.SUPERUSERS_PROP);
+    if (superUserObj != null) {
+      String superUsersStr = (String) superUserObj;
+      for (String user : superUsersStr.split(Consts.SEMI_COLON)) {
         superUsers.add(KafkaPrincipal.fromString(user.trim()));
       }
-    } else {
-      superUsers = new HashSet<>();
+    }
+
+    Object consumerOffsetsEnabledObj = configs.get(Consts.CONSUMER_OFFSETS_ENABLED);
+    if (consumerOffsetsEnabledObj != null) {
+      consumerOffsetsEnabled = (boolean) consumerOffsetsEnabledObj;
     }
 
     //initialize database connection.
@@ -140,6 +142,10 @@ public class HopsAclAuthorizer implements Authorizer {
     
     if (isSuperUser(principal)) {
       return true;
+    }
+
+    if (isConsumerOffsetBlocked(topicName)) {
+      return false;
     }
     
     if (resource.resourceType().equals(
@@ -226,6 +232,15 @@ public class HopsAclAuthorizer implements Authorizer {
       return true;
     }
     LOG.debug("principal = " + principal + " is not a super user.");
+    return false;
+  }
+
+  private boolean isConsumerOffsetBlocked(String topicName) {
+    if ("__consumer_offsets".equals(topicName) && !consumerOffsetsEnabled) {
+      LOG.debug("topic = " + topicName + " is forbidden.");
+      return true;
+    }
+    LOG.debug("topic = " + topicName + " is not forbidden.");
     return false;
   }
 
