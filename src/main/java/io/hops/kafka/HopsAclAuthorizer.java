@@ -32,7 +32,7 @@ public class HopsAclAuthorizer implements Authorizer {
   //all the resources for all actions from all posts, defaults to no superusers.
   private Set<KafkaPrincipal> superUsers = new HashSet<>();
   //Identifies if work with __consumer_offsets topic is allowed.
-  private boolean consumerOffsetsEnabled = false;
+  private boolean consumerOffsetsAccessAllowed = false;
 
   private DbConnection dbConnection;
 
@@ -69,9 +69,9 @@ public class HopsAclAuthorizer implements Authorizer {
       }
     }
 
-    Object consumerOffsetsEnabledObj = configs.get(Consts.CONSUMER_OFFSETS_ENABLED);
-    if (consumerOffsetsEnabledObj != null) {
-      consumerOffsetsEnabled = (boolean) consumerOffsetsEnabledObj;
+    Object consumerOffsetsAccessAllowedObj = configs.get(Consts.CONSUMER_OFFSETS_ACCESS_ALLOWED);
+    if (consumerOffsetsAccessAllowedObj != null) {
+      consumerOffsetsAccessAllowed = (boolean) consumerOffsetsAccessAllowedObj;
     }
 
     //initialize database connection.
@@ -145,8 +145,8 @@ public class HopsAclAuthorizer implements Authorizer {
     }
 
     if ("__consumer_offsets".equals(topicName)) {
-      LOG.debug("topic = " + topicName + " access allowed: " + consumerOffsetsEnabled);
-      return consumerOffsetsEnabled;
+      LOG.debug("topic = " + topicName + " access allowed: " + consumerOffsetsAccessAllowed);
+      return consumerOffsetsAccessAllowed;
     }
     
     if (resource.resourceType().equals(
