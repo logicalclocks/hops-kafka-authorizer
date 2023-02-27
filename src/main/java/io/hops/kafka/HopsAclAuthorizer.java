@@ -144,8 +144,9 @@ public class HopsAclAuthorizer implements Authorizer {
       return true;
     }
 
-    if (isConsumerOffsetBlocked(topicName)) {
-      return false;
+    if ("__consumer_offsets".equals(topicName)) {
+      LOG.debug("topic = " + topicName + " access allowed: " + consumerOffsetsEnabled);
+      return consumerOffsetsEnabled;
     }
     
     if (resource.resourceType().equals(
@@ -232,15 +233,6 @@ public class HopsAclAuthorizer implements Authorizer {
       return true;
     }
     LOG.debug("principal = " + principal + " is not a super user.");
-    return false;
-  }
-
-  private boolean isConsumerOffsetBlocked(String topicName) {
-    if ("__consumer_offsets".equals(topicName) && !consumerOffsetsEnabled) {
-      LOG.debug("topic = " + topicName + " is forbidden.");
-      return true;
-    }
-    LOG.debug("topic = " + topicName + " is not forbidden.");
     return false;
   }
 
