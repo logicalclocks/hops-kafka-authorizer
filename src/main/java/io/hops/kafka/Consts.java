@@ -47,5 +47,6 @@ public final class Consts {
   public static final String DATABASE_MAX_POOL_SIZE = "database.pool.size";
   public static final String DATABASE_ACL_POLLING_FREQUENCY_MS = "acl.polling.frequency.ms";
   public static final String CONSUMER_OFFSETS_ACCESS_ALLOWED = "consumer_offsets.access_allowed";
+  public static final String CACHE_MAX_SIZE = "cache.max_size";
   
 }

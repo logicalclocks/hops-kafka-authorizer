@@ -85,8 +85,9 @@ public class HopsAclAuthorizer implements Authorizer {
         configs.get(Consts.DATABASE_PREPSTMT_CACHE_SQL_LIMIT).toString());
 
     long expireDuration = Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS)));
+    long cacheMaxSize = Long.parseLong(String.valueOf(configs.get(Consts.CACHE_MAX_SIZE)));
     topicProject = CacheBuilder.newBuilder()
-        .maximumSize(1000)
+        .maximumSize(cacheMaxSize)
         .build(new CacheLoader<String, Integer>() {
           @Override
           public Integer load(String topicName) throws SQLException {
