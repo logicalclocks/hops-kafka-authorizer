@@ -71,7 +71,7 @@ public class HopsAclAuthorizer implements Authorizer {
 
     Object consumerOffsetsAccessAllowedObj = configs.get(Consts.CONSUMER_OFFSETS_ACCESS_ALLOWED);
     if (consumerOffsetsAccessAllowedObj != null) {
-      consumerOffsetsAccessAllowed = (boolean) consumerOffsetsAccessAllowedObj;
+      consumerOffsetsAccessAllowed = Boolean.parseBoolean((String) consumerOffsetsAccessAllowedObj);
     }
 
     //initialize database connection.
