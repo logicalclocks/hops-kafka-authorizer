@@ -1,18 +1,14 @@
 package io.hops.kafka;
 
-import io.hops.kafka.authorizer.tables.HopsAcl;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import org.apache.log4j.Logger;
+import org.javatuples.Pair;
 
 /**
  * Class providing database connectivity to HopsWorks Kafka Authorizer.
@@ -22,10 +18,20 @@ public class DbConnection {
   
   private static final Logger LOG = Logger.getLogger(DbConnection.class.getName());
 
-  private static final String SQL_COMMAND_SPECIFIC = "SELECT acls.*, project_team.team_role " +
-      "FROM topic_acls as acls " +
-      "JOIN project_team ON acls.project_id = project_team.project_id AND acls.username = project_team.team_member " +
-      "WHERE topic_name = ?";
+  private static final String SQL_SELECT_TOPIC_PROJECT = "SELECT pt.project_id " +
+      "FROM project_topics pt " +
+      "WHERE pt.topic_name = ?";
+
+  private static final String SQL_SELECT_PROJECT_ROLE = "SELECT p.id, pt.team_role " +
+      "FROM project_team pt " +
+      "JOIN project p ON pt.project_id = p.id " +
+      "JOIN users u ON pt.team_member = u.email " +
+      "WHERE p.projectname = ? AND u.username = ?";
+
+  private static final String SQL_SELECT_SHARED_PROJECT = "SELECT dsw.permission " +
+      "FROM dataset_shared_with dsw " +
+      "JOIN dataset d ON dsw.dataset = d.id " +
+      "WHERE d.feature_store_id IS NOT NULL AND dsw.project = ? AND d.projectId = ?";
 
   private final HikariDataSource datasource;
 
@@ -49,55 +55,56 @@ public class DbConnection {
     LOG.info("connection made successfully to:" + dbUrl);
   }
 
-  public Map<String, List<HopsAcl>> getAcls(String topicName) throws SQLException {
-    int tries = 2;
-
-    Connection connection = null;
-    PreparedStatement preparedStatement = null;
-    ResultSet resultSet = null;
-
-    Map<String, List<HopsAcl>> topicAcls = new HashMap<>();
-
-    while (tries > 0) {
-      try {
-        connection = datasource.getConnection();
-        preparedStatement = connection.prepareStatement(SQL_COMMAND_SPECIFIC);
-        preparedStatement.setString(1, topicName);
-        resultSet = preparedStatement.executeQuery();
-
-        while (resultSet.next()) {
-          HopsAcl acl = new HopsAcl(resultSet.getString(Consts.TOPIC_NAME),
-              resultSet.getString(Consts.PRINCIPAL),
-              resultSet.getString(Consts.PERMISSION_TYPE),
-              resultSet.getString(Consts.OPERATION_TYPE),
-              resultSet.getString(Consts.HOST),
-              resultSet.getString(Consts.ROLE),
-              resultSet.getString(Consts.TEAM_ROLE)
-          );
-
-          List<HopsAcl> topicPrincipalAcl = topicAcls.getOrDefault(acl.getPrincipal(), new ArrayList<>());
-          topicPrincipalAcl.add(acl);
-          topicAcls.put(acl.getPrincipal(), topicPrincipalAcl);
-        }
-        break;
-      } catch (Exception e) {
-        LOG.error("Exception during the retrieval of acls for topic: '" + topicName + "'," +
-            "retries left: " + tries, e);
-        tries--;
-      } finally {
-        if (preparedStatement != null) {
-          preparedStatement.close();
-        }
-        if (resultSet != null) {
-          resultSet.close();
-        }
-        if (connection != null) {
-          connection.close();
-        }
-      }
+  public Integer getTopicProject(String topicName) throws SQLException {
+    try (Connection connection = datasource.getConnection();
+         PreparedStatement preparedStatement = getTopicProjectPreparedStatement(connection, topicName);
+         ResultSet resultSet = preparedStatement.executeQuery()) {
+      resultSet.next();
+      return resultSet.getInt(1);
     }
+  }
 
-    return topicAcls;
+  public Pair<Integer, String> getProjectRole(String projectName, String username) throws SQLException {
+    try (Connection connection = datasource.getConnection();
+         PreparedStatement preparedStatement = getProjectRolePreparedStatement(connection, projectName, username);
+         ResultSet resultSet = preparedStatement.executeQuery()) {
+      resultSet.next();
+      return new Pair<>(resultSet.getInt(1), resultSet.getString(2));
+    }
+  }
+
+  public String getSharedProject(int userProjectId, int topicProjectId) throws SQLException {
+    try (Connection connection = datasource.getConnection();
+         PreparedStatement preparedStatement = getSharedProjectPreparedStatement(connection, userProjectId,
+             topicProjectId);
+         ResultSet resultSet = preparedStatement.executeQuery()) {
+      resultSet.next();
+      return resultSet.getString(1);
+    }
+  }
+
+  private PreparedStatement getTopicProjectPreparedStatement(Connection connection, String topicName)
+      throws SQLException {
+    PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_TOPIC_PROJECT);
+    preparedStatement.setString(1, topicName);
+    return preparedStatement;
+  }
+
+  private PreparedStatement getProjectRolePreparedStatement(Connection connection, String projectName, String username)
+      throws SQLException {
+    PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_PROJECT_ROLE);
+    preparedStatement.setString(1, projectName);
+    preparedStatement.setString(2, username);
+    return preparedStatement;
+  }
+
+  private PreparedStatement getSharedProjectPreparedStatement(Connection connection, int userProjectId,
+                                                              int topicProjectId)
+      throws SQLException {
+    PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_SHARED_PROJECT);
+    preparedStatement.setInt(1, userProjectId);
+    preparedStatement.setInt(2, topicProjectId);
+    return preparedStatement;
   }
 
   /**
