@@ -57,54 +57,37 @@ public class DbConnection {
 
   public Integer getTopicProject(String topicName) throws SQLException {
     try (Connection connection = datasource.getConnection();
-         PreparedStatement preparedStatement = getTopicProjectPreparedStatement(connection, topicName);
-         ResultSet resultSet = preparedStatement.executeQuery()) {
-      resultSet.next();
-      return resultSet.getInt(1);
+         PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_TOPIC_PROJECT)) {
+      preparedStatement.setString(1, topicName);
+      try(ResultSet resultSet = preparedStatement.executeQuery()) {
+        resultSet.next();
+        return resultSet.getInt(1);
+      }
     }
   }
 
   public Pair<Integer, String> getProjectRole(String projectName, String username) throws SQLException {
     try (Connection connection = datasource.getConnection();
-         PreparedStatement preparedStatement = getProjectRolePreparedStatement(connection, projectName, username);
-         ResultSet resultSet = preparedStatement.executeQuery()) {
-      resultSet.next();
-      return new Pair<>(resultSet.getInt(1), resultSet.getString(2));
+         PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_PROJECT_ROLE)) {
+      preparedStatement.setString(1, projectName);
+      preparedStatement.setString(2, username);
+      try(ResultSet resultSet = preparedStatement.executeQuery()) {
+        resultSet.next();
+        return new Pair<>(resultSet.getInt(1), resultSet.getString(2));
+      }
     }
   }
 
   public String getSharedProject(int userProjectId, int topicProjectId) throws SQLException {
     try (Connection connection = datasource.getConnection();
-         PreparedStatement preparedStatement = getSharedProjectPreparedStatement(connection, userProjectId,
-             topicProjectId);
-         ResultSet resultSet = preparedStatement.executeQuery()) {
-      resultSet.next();
-      return resultSet.getString(1);
+         PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_SHARED_PROJECT)) {
+      preparedStatement.setInt(1, userProjectId);
+      preparedStatement.setInt(2, topicProjectId);
+      try(ResultSet resultSet = preparedStatement.executeQuery()) {
+        resultSet.next();
+        return resultSet.getString(1);
+      }
     }
-  }
-
-  private PreparedStatement getTopicProjectPreparedStatement(Connection connection, String topicName)
-      throws SQLException {
-    PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_TOPIC_PROJECT);
-    preparedStatement.setString(1, topicName);
-    return preparedStatement;
-  }
-
-  private PreparedStatement getProjectRolePreparedStatement(Connection connection, String projectName, String username)
-      throws SQLException {
-    PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_PROJECT_ROLE);
-    preparedStatement.setString(1, projectName);
-    preparedStatement.setString(2, username);
-    return preparedStatement;
-  }
-
-  private PreparedStatement getSharedProjectPreparedStatement(Connection connection, int userProjectId,
-                                                              int topicProjectId)
-      throws SQLException {
-    PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_SHARED_PROJECT);
-    preparedStatement.setInt(1, userProjectId);
-    preparedStatement.setInt(2, topicProjectId);
-    return preparedStatement;
   }
 
   /**
