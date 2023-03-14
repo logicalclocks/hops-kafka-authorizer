@@ -60,8 +60,9 @@ public class DbConnection {
          PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_TOPIC_PROJECT)) {
       preparedStatement.setString(1, topicName);
       try(ResultSet resultSet = preparedStatement.executeQuery()) {
-        resultSet.next();
-        return resultSet.getInt(1);
+        if (resultSet.next())
+          return resultSet.getInt(1);
+        return null;
       }
     }
   }
@@ -72,8 +73,9 @@ public class DbConnection {
       preparedStatement.setString(1, projectName);
       preparedStatement.setString(2, username);
       try(ResultSet resultSet = preparedStatement.executeQuery()) {
-        resultSet.next();
-        return new Pair<>(resultSet.getInt(1), resultSet.getString(2));
+        if (resultSet.next())
+          return new Pair<>(resultSet.getInt(1), resultSet.getString(2));
+        return null;
       }
     }
   }
@@ -84,8 +86,9 @@ public class DbConnection {
       preparedStatement.setInt(1, userProjectId);
       preparedStatement.setInt(2, topicProjectId);
       try(ResultSet resultSet = preparedStatement.executeQuery()) {
-        resultSet.next();
-        return resultSet.getString(1);
+        if (resultSet.next())
+          return resultSet.getString(1);
+        return null;
       }
     }
   }
