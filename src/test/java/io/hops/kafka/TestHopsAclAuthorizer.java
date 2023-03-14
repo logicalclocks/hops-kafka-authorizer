@@ -1,5 +1,6 @@
 package io.hops.kafka;
 
+import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import kafka.network.RequestChannel;
 import kafka.security.auth.Operation;
@@ -81,6 +82,31 @@ public class TestHopsAclAuthorizer {
     LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
     LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
 
+    Mockito.when(topicProjectCache.get(anyString())).thenThrow(new CacheLoader.InvalidCacheLoadException(""));
+
+    KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
+    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
+    hopsAclAuthorizer.setDbConnection(dbConnection);
+
+    RequestChannel.Session session = new RequestChannel.Session(kafkaPrincipal, InetAddress.getByName("10.0.2.15"));
+
+    // Act
+    boolean result = hopsAclAuthorizer.authorize(session, buildOperation("describe"), buildResource("test"));
+
+    // Assert
+    Assertions.assertFalse(result);
+    Mockito.verify(topicProjectCache, Mockito.times(1)).get(anyString());
+    Mockito.verify(userProjectCache, Mockito.times(0)).get(anyString());
+    Mockito.verify(projectShareCache, Mockito.times(0)).get(any());
+  }
+
+  @Test
+  public void testAuthorizeTopicException() throws UnknownHostException, ExecutionException {
+    // Arrange
+    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
+
     Mockito.when(topicProjectCache.get(anyString())).thenThrow(new ExecutionException(new SQLException()));
 
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
@@ -107,6 +133,31 @@ public class TestHopsAclAuthorizer {
     LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
 
     Mockito.when(topicProjectCache.get(anyString())).thenReturn(120);
+    Mockito.when(userProjectCache.get(anyString())).thenThrow(new CacheLoader.InvalidCacheLoadException(""));
+
+    KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
+    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
+
+    RequestChannel.Session session = new RequestChannel.Session(kafkaPrincipal, InetAddress.getByName("10.0.2.15"));
+
+    // Act
+    boolean result = hopsAclAuthorizer.authorize(session, buildOperation("describe"), buildResource("test"));
+
+    // Assert
+    Assertions.assertFalse(result);
+    Mockito.verify(topicProjectCache, Mockito.times(1)).get(anyString());
+    Mockito.verify(userProjectCache, Mockito.times(1)).get(anyString());
+    Mockito.verify(projectShareCache, Mockito.times(0)).get(any());
+  }
+
+  @Test
+  public void testAuthorizePrincipalException() throws UnknownHostException, ExecutionException {
+    // Arrange
+    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
+
+    Mockito.when(topicProjectCache.get(anyString())).thenReturn(120);
     Mockito.when(userProjectCache.get(anyString())).thenThrow(new ExecutionException(new SQLException()));
 
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
@@ -125,7 +176,33 @@ public class TestHopsAclAuthorizer {
   }
 
   @Test
-  public void testAuthorizeNotShared() throws UnknownHostException, ExecutionException {
+  public void testAuthorizeMissingShared() throws UnknownHostException, ExecutionException {
+    // Arrange
+    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
+    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
+
+    Mockito.when(topicProjectCache.get(anyString())).thenReturn(120);
+    Mockito.when(userProjectCache.get(anyString())).thenReturn(new Pair<>(119, Consts.DATA_OWNER));
+    Mockito.when(projectShareCache.get(any())).thenThrow(new CacheLoader.InvalidCacheLoadException(""));
+
+    KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
+    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
+
+    RequestChannel.Session session = new RequestChannel.Session(kafkaPrincipal, InetAddress.getByName("10.0.2.15"));
+
+    // Act
+    boolean result = hopsAclAuthorizer.authorize(session, buildOperation("describe"), buildResource("test"));
+
+    // Assert
+    Assertions.assertFalse(result);
+    Mockito.verify(topicProjectCache, Mockito.times(1)).get(anyString());
+    Mockito.verify(userProjectCache, Mockito.times(1)).get(anyString());
+    Mockito.verify(projectShareCache, Mockito.times(1)).get(any());
+  }
+
+  @Test
+  public void testAuthorizeSharedException() throws UnknownHostException, ExecutionException {
     // Arrange
     LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
     LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
