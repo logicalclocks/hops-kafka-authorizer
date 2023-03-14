@@ -44,6 +44,32 @@ public class TestDbConnection {
   }
 
   @Test
+  public void testGetTopicProjectNull() throws SQLException {
+    // Arrange
+    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
+    Connection connection = Mockito.mock(Connection.class);
+    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
+    ResultSet resultSet = Mockito.mock(ResultSet.class);
+
+    Mockito.when(datasource.getConnection()).thenReturn(connection);
+    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+    Mockito.when(preparedStatement.executeQuery()).thenReturn(resultSet);
+    Mockito.when(resultSet.next()).thenReturn(false);
+
+    DbConnection dbConnection = new DbConnection(datasource);
+
+    // Act
+    Integer topicProjectId = dbConnection.getTopicProject("test_topic");
+
+    // Assert
+    Assertions.assertNull(topicProjectId);
+    Mockito.verify(datasource, Mockito.times(1)).getConnection();
+    Mockito.verify(connection, Mockito.times(1)).close();
+    Mockito.verify(preparedStatement, Mockito.times(1)).close();
+    Mockito.verify(resultSet, Mockito.times(1)).close();
+  }
+
+  @Test
   public void testGetTopicProjectFail() throws SQLException {
     // Arrange
     HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
@@ -105,6 +131,32 @@ public class TestDbConnection {
   }
 
   @Test
+  public void testGetProjectRoleNull() throws SQLException {
+    // Arrange
+    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
+    Connection connection = Mockito.mock(Connection.class);
+    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
+    ResultSet resultSet = Mockito.mock(ResultSet.class);
+
+    Mockito.when(datasource.getConnection()).thenReturn(connection);
+    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+    Mockito.when(preparedStatement.executeQuery()).thenReturn(resultSet);
+    Mockito.when(resultSet.next()).thenReturn(false);
+
+    DbConnection dbConnection = new DbConnection(datasource);
+
+    // Act
+    Pair<Integer, String> pair = dbConnection.getProjectRole("test_project_name", "test_username");
+
+    // Assert
+    Assertions.assertNull(pair);
+    Mockito.verify(datasource, Mockito.times(1)).getConnection();
+    Mockito.verify(connection, Mockito.times(1)).close();
+    Mockito.verify(preparedStatement, Mockito.times(1)).close();
+    Mockito.verify(resultSet, Mockito.times(1)).close();
+  }
+
+  @Test
   public void testGetProjectRoleFail() throws SQLException {
     // Arrange
     HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
@@ -159,6 +211,32 @@ public class TestDbConnection {
 
     // Assert
     Assertions.assertEquals("example_permission", permission);
+    Mockito.verify(datasource, Mockito.times(1)).getConnection();
+    Mockito.verify(connection, Mockito.times(1)).close();
+    Mockito.verify(preparedStatement, Mockito.times(1)).close();
+    Mockito.verify(resultSet, Mockito.times(1)).close();
+  }
+
+  @Test
+  public void testGetSharedProjectNull() throws SQLException {
+    // Arrange
+    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
+    Connection connection = Mockito.mock(Connection.class);
+    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
+    ResultSet resultSet = Mockito.mock(ResultSet.class);
+
+    Mockito.when(datasource.getConnection()).thenReturn(connection);
+    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+    Mockito.when(preparedStatement.executeQuery()).thenReturn(resultSet);
+    Mockito.when(resultSet.next()).thenReturn(false);
+
+    DbConnection dbConnection = new DbConnection(datasource);
+
+    // Act
+    String permission = dbConnection.getSharedProject(119, 120);
+
+    // Assert
+    Assertions.assertNull(permission);
     Mockito.verify(datasource, Mockito.times(1)).getConnection();
     Mockito.verify(connection, Mockito.times(1)).close();
     Mockito.verify(preparedStatement, Mockito.times(1)).close();

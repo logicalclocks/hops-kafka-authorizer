@@ -200,6 +200,9 @@ public class HopsAclAuthorizer implements Authorizer {
         tries--;
         LOG.error(String.format("Failed to authorize user '%s' to perform '%s' on topic '%s', retries left: %s",
             principalName, operation.toString(), topicName, tries), e.getCause());
+      } catch (CacheLoader.InvalidCacheLoadException e) {
+        // This exception is thrown if cache result is 'null' (nothing in database)
+        return false;
       }
     }
     return false;
