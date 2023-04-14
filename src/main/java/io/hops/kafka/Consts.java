@@ -15,6 +15,7 @@ public final class Consts {
   public static final String ANONYMOUS = "ANONYMOUS";
 
   //Operations
+  public static final String CREATE = "Create";
   public static final String READ = "Read";
   public static final String WRITE = "Write";
   public static final String DESCRIBE = "Describe";
