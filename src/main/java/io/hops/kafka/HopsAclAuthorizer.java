@@ -222,6 +222,7 @@ public class HopsAclAuthorizer implements Authorizer {
   protected boolean authorizeOperation(Operation operation, String userRole) {
     switch (operation.toString()) {
       case Consts.WRITE:
+      case Consts.CREATE:
         return Consts.DATA_OWNER.equals(userRole);
       case Consts.READ:
       case Consts.DESCRIBE:
