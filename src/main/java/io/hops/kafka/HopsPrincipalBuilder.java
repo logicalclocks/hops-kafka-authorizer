@@ -18,15 +18,19 @@ import java.security.Principal;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.security.auth.AuthenticationContext;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
-import org.apache.kafka.common.security.auth.KafkaPrincipalBuilder;
 import org.apache.kafka.common.security.auth.SslAuthenticationContext;
+import org.apache.kafka.common.security.authenticator.DefaultKafkaPrincipalBuilder;
 import sun.security.x509.X500Name;
 
 /**
  * Customized Principal Builder for Hopsworks.
  * <p>
  */
-public class HopsPrincipalBuilder implements KafkaPrincipalBuilder {
+public class HopsPrincipalBuilder extends DefaultKafkaPrincipalBuilder {
+
+  public HopsPrincipalBuilder() {
+    super(null, null);
+  }
 
   /*
    * By default, the TLS username will be of the form

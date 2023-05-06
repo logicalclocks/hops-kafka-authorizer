@@ -18,6 +18,7 @@ import org.apache.kafka.server.authorizer.Authorizer;
 import org.apache.kafka.server.authorizer.AuthorizerServerInfo;
 
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -137,7 +138,8 @@ public class HopsAclAuthorizer implements Authorizer {
 
   @Override
   public Map<Endpoint, ? extends CompletionStage<Void>> start(AuthorizerServerInfo authorizerServerInfo) {
-    return null;
+    // Nothing major to do during the startup. We could potentially warm up the caches.
+    return new HashMap<>();
   }
 
   @Override
@@ -281,11 +283,12 @@ public class HopsAclAuthorizer implements Authorizer {
   }
   
   private boolean isSuperUser(KafkaPrincipal principal) {
-    if (superUsers.contains(principal)) {
-      LOG.debug("principal = " + principal + " is a super user, allowing operation without checking acls.");
+    // TODO(Fabio): This would benefit from some tests - My first attempt didn't work.
+    if (superUsers.stream().anyMatch(su -> su.getName().equals(principal.getName()))) {
+      LOG.debug("principal = " + principal.getName() + " is a super user, allowing operation without checking acls.");
       return true;
     }
-    LOG.debug("principal = " + principal + " is not a super user.");
+    LOG.debug("principal = " + principal.getName() + " is not a super user.");
     return false;
   }
 
