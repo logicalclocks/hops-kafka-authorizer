@@ -3,21 +3,34 @@ package io.hops.kafka;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import kafka.network.RequestChannel;
-import kafka.security.auth.Acl;
-import kafka.security.auth.Authorizer;
-import kafka.security.auth.Operation;
-import kafka.security.auth.Resource;
+import org.apache.kafka.common.Endpoint;
+import org.apache.kafka.common.acl.AclBinding;
+import org.apache.kafka.common.acl.AclBindingFilter;
+import org.apache.kafka.common.acl.AclOperation;
+import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
+import org.apache.kafka.server.authorizer.AclCreateResult;
+import org.apache.kafka.server.authorizer.AclDeleteResult;
+import org.apache.kafka.server.authorizer.Action;
+import org.apache.kafka.server.authorizer.AuthorizableRequestContext;
+import org.apache.kafka.server.authorizer.AuthorizationResult;
+import org.apache.kafka.server.authorizer.Authorizer;
+import org.apache.kafka.server.authorizer.AuthorizerServerInfo;
 
 import java.sql.SQLException;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
-import org.apache.log4j.Logger;
 import org.javatuples.Pair;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -27,7 +40,7 @@ import org.javatuples.Pair;
  */
 public class HopsAclAuthorizer implements Authorizer {
   
-  private static final Logger LOG = Logger.getLogger("kafka.authorizer.logger");
+  private static final Logger LOG = LoggerFactory.getLogger("kafka.authorizer.logger");
   //List of users that will be treated as superusers and will have access to
   //all the resources for all actions from all posts, defaults to no superusers.
   private Set<KafkaPrincipal> superUsers = new HashSet<>();
@@ -65,7 +78,8 @@ public class HopsAclAuthorizer implements Authorizer {
     if (superUserObj != null) {
       String superUsersStr = (String) superUserObj;
       for (String user : superUsersStr.split(Consts.SEMI_COLON)) {
-        superUsers.add(KafkaPrincipal.fromString(user.trim()));
+        String[] userSplits = user.split(Consts.COLON_SEPARATOR);
+        superUsers.add(new KafkaPrincipal(userSplits[0], userSplits[1]));
       }
     }
 
@@ -120,63 +134,97 @@ public class HopsAclAuthorizer implements Authorizer {
           }
         });
   }
-  
+
   @Override
-  public boolean authorize(RequestChannel.Session session, Operation operation, Resource resource) {
-    KafkaPrincipal principal = session.principal();
-    String host = session.clientAddress().getHostAddress();
-    String topicName = resource.name();
+  public Map<Endpoint, ? extends CompletionStage<Void>> start(AuthorizerServerInfo authorizerServerInfo) {
+    return null;
+  }
+
+  @Override
+  public List<AuthorizationResult> authorize(AuthorizableRequestContext authorizableRequestContext, List<Action> list) {
+    return list.stream()
+        .map(a -> authorize(authorizableRequestContext, a))
+        .collect(Collectors.toList());
+  }
+
+  public AuthorizationResult authorize(AuthorizableRequestContext requestContext, Action action) {
+    KafkaPrincipal principal = requestContext.principal();
+    String host = requestContext.clientAddress().getHostAddress();
+    String topicName = action.resourcePattern().name();
     String principalName = principal.getName();
-  
-    LOG.debug("authorize :: session:" + session);
+    AclOperation operation = action.operation();
+
+    LOG.debug("authorize :: session:" + requestContext);
     LOG.debug("authorize :: principal.name:" + principalName);
     LOG.debug("authorize :: principal.type:" + principal.getPrincipalType());
     LOG.debug("authorize :: operation:" + operation);
     LOG.debug("authorize :: host:" + host);
-    LOG.debug("authorize :: resource:" + resource);
+    LOG.debug("authorize :: resource:" + action.resourcePattern().resourceType());
     LOG.debug("authorize :: topicName:" + topicName);
-    
+
     if (principalName.equalsIgnoreCase(Consts.ANONYMOUS)) {
       LOG.info("No Acl found for cluster authorization, user:" + principalName);
-      return false;
+      return AuthorizationResult.DENIED;
     }
-    
+
     if (isSuperUser(principal)) {
-      return true;
+      return AuthorizationResult.ALLOWED;
     }
 
     if ("__consumer_offsets".equals(topicName)) {
       LOG.debug("topic = " + topicName + " access allowed: " + consumerOffsetsAccessAllowed);
-      return consumerOffsetsAccessAllowed;
+      return consumerOffsetsAccessAllowed ? AuthorizationResult.ALLOWED : AuthorizationResult.DENIED;
     }
-    
-    if (resource.resourceType().equals(
-        kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.CLUSTER))) {
+
+    if (action.resourcePattern().resourceType().equals(ResourceType.CLUSTER)) {
       LOG.info("This is cluster authorization for broker: " + principalName);
-      return false;
+      return AuthorizationResult.DENIED;
     }
-    if (resource.resourceType().equals(
-        kafka.security.auth.ResourceType$.MODULE$.fromString(Consts.GROUP))) {
+
+    if (action.resourcePattern().resourceType().equals(ResourceType.GROUP)) {
       //Check if group requested starts with projectname__ and is equal to the current users project
       String projectCN = principalName.split(Consts.PROJECT_USER_DELIMITER)[0];
-      if (resource.name().contains(Consts.PROJECT_USER_DELIMITER)) {
-        String projectConsumerGroup = resource.name().split(Consts.PROJECT_USER_DELIMITER)[0];
+      if (topicName.contains(Consts.PROJECT_USER_DELIMITER)) {
+        String projectConsumerGroup = topicName.split(Consts.PROJECT_USER_DELIMITER)[0];
         LOG.debug("Consumer group :: projectCN:" + projectCN);
         LOG.debug("Consumer group :: projectConsumerGroup:" + projectConsumerGroup);
         //Check principal project name is equal to project consumer group
         if (!projectCN.equals(projectConsumerGroup)) {
-          LOG.info("Principal:" + principalName + " is not allowed to access group:" + resource.name());
-          return false;
+          LOG.info("Principal:" + principalName + " is not allowed to access group:" + topicName);
+          return AuthorizationResult.DENIED;
         }
       }
-      LOG.info("Principal:" + principalName + " is allowed to access group:" + resource.name());
-      return true;
+      LOG.info("Principal:" + principalName + " is allowed to access group:" + topicName);
+      return AuthorizationResult.ALLOWED;
     }
 
     return authorizeProjectUser(topicName, principalName, operation);
   }
 
-  private boolean authorizeProjectUser(String topicName, String principalName, Operation operation) {
+  @Override
+  public List<? extends CompletionStage<AclCreateResult>> createAcls(
+      AuthorizableRequestContext authorizableRequestContext, List<AclBinding> list) {
+    return null;
+  }
+
+  @Override
+  public List<? extends CompletionStage<AclDeleteResult>> deleteAcls(
+      AuthorizableRequestContext authorizableRequestContext, List<AclBindingFilter> list) {
+    return null;
+  }
+
+  @Override
+  public Iterable<AclBinding> acls(AclBindingFilter aclBindingFilter) {
+    return null;
+  }
+
+  @Override
+  public AuthorizationResult authorizeByResourceType(AuthorizableRequestContext requestContext,
+                                                     AclOperation operation, ResourceType resource) {
+    return AuthorizationResult.DENIED;
+  }
+
+  private AuthorizationResult authorizeProjectUser(String topicName, String principalName, AclOperation operation) {
     int tries = 2;
     while (tries > 0) {
       try {
@@ -202,33 +250,33 @@ public class HopsAclAuthorizer implements Authorizer {
             principalName, operation.toString(), topicName, tries), e.getCause());
       } catch (CacheLoader.InvalidCacheLoadException e) {
         // This exception is thrown if cache result is 'null' (nothing in database)
-        return false;
+        return AuthorizationResult.DENIED;
       }
     }
-    return false;
+    return AuthorizationResult.DENIED;
   }
 
-  protected boolean authorizePermission(Operation operation, String sharePermission) {
+  protected AuthorizationResult authorizePermission(AclOperation operation, String sharePermission) {
     switch (sharePermission) {
       case Consts.READ_ONLY:
         return authorizeOperation(operation, Consts.DATA_SCIENTIST);
       case Consts.EDITABLE_BY_OWNERS:
       case Consts.EDITABLE:
       default:
-        return false;
+        return AuthorizationResult.DENIED;
     }
   }
 
-  protected boolean authorizeOperation(Operation operation, String userRole) {
-    switch (operation.toString()) {
-      case Consts.WRITE:
-      case Consts.CREATE:
-        return Consts.DATA_OWNER.equals(userRole);
-      case Consts.READ:
-      case Consts.DESCRIBE:
-        return true;
+  protected AuthorizationResult authorizeOperation(AclOperation operation, String userRole) {
+    switch (operation) {
+      case WRITE:
+      case CREATE:
+        return Consts.DATA_OWNER.equals(userRole) ? AuthorizationResult.ALLOWED : AuthorizationResult.DENIED;
+      case READ:
+      case DESCRIBE:
+        return AuthorizationResult.ALLOWED;
       default:
-        return false;
+        return AuthorizationResult.DENIED;
     }
   }
   
@@ -239,36 +287,6 @@ public class HopsAclAuthorizer implements Authorizer {
     }
     LOG.debug("principal = " + principal + " is not a super user.");
     return false;
-  }
-
-  @Override
-  public void addAcls(scala.collection.immutable.Set<Acl> acls, Resource resource) {
-  }
-
-  @Override
-  public boolean removeAcls(scala.collection.immutable.Set<Acl> acls, Resource resource) {
-    return false;
-  }
-
-  @Override
-  public boolean removeAcls(Resource resource) {
-    return false;
-  }
-
-  @Override
-  public scala.collection.immutable.Set<Acl> getAcls(Resource resource) {
-    return null;
-  }
-
-  @Override
-  public scala.collection.immutable.Map<Resource,
-      scala.collection.immutable.Set<Acl>> getAcls(KafkaPrincipal principal) {
-    return null;
-  }
-
-  @Override
-  public scala.collection.immutable.Map<Resource, scala.collection.immutable.Set<Acl>> getAcls() {
-    return null;
   }
 
   @Override
