@@ -7,18 +7,10 @@ package io.hops.kafka;
 public final class Consts {
 
   public static final String COLON_SEPARATOR = ":";
-  public static final String COMMA_SEPARATOR = ",";
-  public static final String ASSIGN_SEPARATOR = "=";
   public static final String SEMI_COLON = ";";
   public static final String PROJECT_USER_DELIMITER = "__";
 
   public static final String ANONYMOUS = "ANONYMOUS";
-
-  //Operations
-  public static final String CREATE = "Create";
-  public static final String READ = "Read";
-  public static final String WRITE = "Write";
-  public static final String DESCRIBE = "Describe";
 
   //User roles
   public static final String DATA_OWNER = "Data owner";
@@ -28,12 +20,6 @@ public final class Consts {
   public static final String EDITABLE = "EDITABLE";
   public static final String READ_ONLY = "READ_ONLY";
   public static final String EDITABLE_BY_OWNERS = "EDITABLE_BY_OWNERS";
-
-  //Resource Types
-  public static final String CLUSTER = "Cluster";
-  public static final String TOPIC = "Topic";
-  public static final String GROUP = "Group";
-  public static final String WILDCARD = "*";
 
   //Properties attributes
   public static final String SUPERUSERS_PROP = "super.users";

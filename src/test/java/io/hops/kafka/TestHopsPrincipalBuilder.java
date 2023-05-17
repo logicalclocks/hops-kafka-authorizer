@@ -12,7 +12,6 @@
  */
 package io.hops.kafka;
 
-import com.sun.net.httpserver.HttpPrincipal;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -24,32 +23,16 @@ import java.security.Principal;
 public class TestHopsPrincipalBuilder {
 
   @Test
-  public void testNonX500Principal() throws Exception {
-    // Arrange
-    HopsPrincipalBuilder realPB = new HopsPrincipalBuilder();
-    HopsPrincipalBuilder pb = Mockito.spy(realPB);
-    Principal originPrincipal = new HttpPrincipal("kafka", "name");
-
-    Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
-
-    // Act
-    Principal p = pb.buildPrincipal(null, null);
-
-    // Assert
-    Assertions.assertEquals(originPrincipal, p);
-  }
-
-  @Test
   public void testAnonymousX500Principal() throws Exception {
     // Arrange
     HopsPrincipalBuilder realPB = new HopsPrincipalBuilder();
     HopsPrincipalBuilder pb = Mockito.spy(realPB);
-    Principal originPrincipal = new KafkaPrincipal("kafka", Consts.ANONYMOUS);
+    Principal originPrincipal = new KafkaPrincipal("User", Consts.ANONYMOUS);
 
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
 
     // Act
-    Principal p = pb.buildPrincipal(null, null);
+    Principal p = pb.build(null);
 
     // Assert
     Assertions.assertEquals(originPrincipal, p);
@@ -64,7 +47,7 @@ public class TestHopsPrincipalBuilder {
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
 
     // Arrange
-    Principal p = pb.buildPrincipal(null, null);
+    Principal p = pb.build(null);
 
     // Assert
     Assertions.assertNotEquals(originPrincipal, p);
@@ -73,7 +56,7 @@ public class TestHopsPrincipalBuilder {
 
     originPrincipal = new X500Principal("CN=another_common_name, OU=0,C=SE,O=organization");
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
-    p = pb.buildPrincipal(null, null);
+    p = pb.build(null);
     Assertions.assertEquals("another_common_name", p.getName());
   }
 }

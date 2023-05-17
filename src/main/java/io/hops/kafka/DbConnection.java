@@ -7,17 +7,17 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-import org.apache.log4j.Logger;
 import org.javatuples.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Class providing database connectivity to HopsWorks Kafka Authorizer.
  * <p>
  */
 public class DbConnection {
-  
-  private static final Logger LOG = Logger.getLogger(DbConnection.class.getName());
 
+  private static final Logger LOG = LoggerFactory.getLogger(DbConnection.class.getName());
   private static final String SQL_SELECT_TOPIC_PROJECT = "SELECT pt.project_id " +
       "FROM project_topics pt " +
       "WHERE pt.topic_name = ?";

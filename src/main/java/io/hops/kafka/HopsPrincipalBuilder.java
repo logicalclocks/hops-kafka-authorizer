@@ -13,25 +13,23 @@
 package io.hops.kafka;
 
 import java.io.IOException;
-import java.util.Map;
 import java.security.Principal;
-import javax.security.auth.x500.X500Principal;
 
-import org.apache.kafka.common.network.TransportLayer;
-import org.apache.kafka.common.network.Authenticator;
 import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.security.auth.AuthenticationContext;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
-import org.apache.kafka.common.security.auth.PrincipalBuilder;
+import org.apache.kafka.common.security.auth.SslAuthenticationContext;
+import org.apache.kafka.common.security.authenticator.DefaultKafkaPrincipalBuilder;
 import sun.security.x509.X500Name;
 
 /**
- * Customized Principal Builder for HopsWorks.
+ * Customized Principal Builder for Hopsworks.
  * <p>
  */
-public class HopsPrincipalBuilder implements PrincipalBuilder {
+public class HopsPrincipalBuilder extends DefaultKafkaPrincipalBuilder {
 
-  @Override
-  public void configure(Map<String, ?> configs) {
+  public HopsPrincipalBuilder() {
+    super(null, null);
   }
 
   /*
@@ -42,18 +40,13 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
    * In our case it will be, principalType:projectName__userName.
    */
   @Override
-  public Principal buildPrincipal(TransportLayer transportLayer, Authenticator authenticator) throws KafkaException {
+  public KafkaPrincipal build(AuthenticationContext authenticationContext) {
     try {
-      Principal principal = getPrincipal(transportLayer);
-
-      if (!((principal instanceof X500Principal)
-          || (principal instanceof KafkaPrincipal))) {
-        return principal;
-      }
+      Principal principal = getPrincipal((SslAuthenticationContext) authenticationContext);
 
       String tlsUserName = principal.getName();
       if (tlsUserName.equalsIgnoreCase(Consts.ANONYMOUS)) {
-        return principal;
+        return KafkaPrincipal.ANONYMOUS;
       }
 
       String userType = principal.toString().split(Consts.COLON_SEPARATOR)[0];
@@ -65,11 +58,7 @@ public class HopsPrincipalBuilder implements PrincipalBuilder {
     }
   }
 
-  protected Principal getPrincipal(TransportLayer transportLayer) throws IOException {
-    return transportLayer.peerPrincipal();
-  }
-
-  @Override
-  public void close() throws KafkaException {
+  protected Principal getPrincipal(SslAuthenticationContext sslAuthenticationContext) throws IOException {
+    return sslAuthenticationContext.session().getPeerPrincipal();
   }
 }
