@@ -13,7 +13,7 @@
     <scala.version>2.12</scala.version>
     <mysql.version>8.0.33</mysql.version>
     <log4j.version>1.2.17</log4j.version>
-    <guava.version>31.1-jre</guava.version>
+    <guava.version>32.0.0-jre</guava.version>
     <hikariCP.version>2.6.0</hikariCP.version>
     <javatuples.version>1.2</javatuples.version>
     <junit.version>5.9.2</junit.version>
