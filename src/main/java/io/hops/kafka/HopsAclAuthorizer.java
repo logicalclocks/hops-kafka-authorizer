@@ -287,7 +287,8 @@ public class HopsAclAuthorizer implements Authorizer {
     }
   }
   
-  private boolean isSuperUser(List<String> subjectNames) {
+  protected boolean isSuperUser(List<String> subjectNames) {
+    // to be considered a super user there has to be an intersection between user subject names and super users
     if (superUsers.stream().anyMatch(su -> subjectNames.contains(su.getName()))) {
       LOGGER.debug(
           "principal = {} is a super user, allowing operation without checking acls.", getPrincipalName(subjectNames));
