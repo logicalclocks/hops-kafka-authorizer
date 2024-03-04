@@ -65,9 +65,9 @@ public class HopsPrincipalBuilder extends DefaultKafkaPrincipalBuilder {
       }
 
       String userType = principal.toString().split(Consts.COLON_SEPARATOR)[0];
+      
       X500Name name = new X500Name(tlsUserName);
       String principleName = name.getCommonName();
-
       // add alternative names to principal name
       List<String> alternativeNameList = getAlternativeNames(sslAuthenticationContext);
       for (String alternativeName: alternativeNameList) {
