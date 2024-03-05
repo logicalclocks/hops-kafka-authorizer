@@ -86,7 +86,7 @@ public class HopsPrincipalBuilder extends DefaultKafkaPrincipalBuilder {
     return sslAuthenticationContext.session().getPeerPrincipal();
   }
 
-  private List<String> getAlternativeNames(SslAuthenticationContext sslAuthenticationContext) {
+  protected List<String> getAlternativeNames(SslAuthenticationContext sslAuthenticationContext) {
     List<String> alternativeNameList = new ArrayList<>();
     try {
       for (Certificate certificate: sslAuthenticationContext.session().getPeerCertificates()) {
