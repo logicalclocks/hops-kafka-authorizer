@@ -244,6 +244,40 @@ public class TestHopsAclAuthorizer {
 
   @ParameterizedTest
   @CsvSource({
+      // super user
+      "user, user, true",
+      "user, user;user1;user2, true",
+      "user;user1;user2, user, true",
+      "user;user1;user2, user;user3;user5, true",
+      // not super user
+      "user, '', false",
+      "user, user1, false",
+      "user3, user;user1;user2, false",
+      "user;user1;user2, user3, false",
+      "user;user1;user2, user3;user4;user5, false"
+  })
+  public void testIsSuperUser(String principalName, String superUsersStr, boolean expectedResult) {
+    // Arrange
+    Set<KafkaPrincipal> superUserSet = new HashSet<>();
+    for (String user : superUsersStr.split(Consts.SEMI_COLON)) {
+      KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("principal_type", user);
+      superUserSet.add(kafkaPrincipal);
+    }
+
+    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(null, null, null);
+    hopsAclAuthorizer.setSuperUsers(superUserSet);
+
+    List<String> subjectNames = Arrays.asList(principalName.split(Consts.SEMI_COLON));
+
+    // Act
+    boolean result = hopsAclAuthorizer.isSuperUser(subjectNames);
+
+    // Assert
+    Assertions.assertEquals(expectedResult, result);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
       // Same project
       "119, 119, Data owner,      Write,    , ALLOWED",
       "119, 119, Data scientist,  Write,    , DENIED",

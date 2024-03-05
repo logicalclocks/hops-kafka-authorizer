@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
  */
 public class DbConnection {
 
-  private static final Logger LOG = LoggerFactory.getLogger(DbConnection.class.getName());
+  private static final Logger LOGGER = LoggerFactory.getLogger(DbConnection.class.getName());
   private static final String SQL_SELECT_TOPIC_PROJECT = "SELECT pt.project_id " +
       "FROM project_topics pt " +
       "WHERE pt.topic_name = ?";
@@ -42,7 +42,7 @@ public class DbConnection {
   
   public DbConnection(String dbUrl, String dbUserName, String dbPassword, int maximumPoolSize,
                       String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit) {
-    LOG.info("Initializing database pool to:" + dbUrl);
+    LOGGER.info("Initializing database pool to: {}", dbUrl);
     HikariConfig config = new HikariConfig();
     config.setJdbcUrl("jdbc:mysql://" + dbUrl);
     config.setUsername(dbUserName);
@@ -52,7 +52,7 @@ public class DbConnection {
     config.addDataSourceProperty("prepStmtCacheSqlLimit", prepStmtCacheSqlLimit);
     config.addDataSourceProperty("maximumPoolSize", maximumPoolSize);
     datasource = new HikariDataSource(config);
-    LOG.info("connection made successfully to:" + dbUrl);
+    LOGGER.info("connection made successfully to: {}", dbUrl);
   }
 
   public Integer getTopicProject(String topicName) throws SQLException {

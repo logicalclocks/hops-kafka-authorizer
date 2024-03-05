@@ -18,6 +18,7 @@ import org.apache.kafka.server.authorizer.Authorizer;
 import org.apache.kafka.server.authorizer.AuthorizerServerInfo;
 
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -106,7 +107,7 @@ public class HopsAclAuthorizer implements Authorizer {
         .build(new CacheLoader<String, Integer>() {
           @Override
           public Integer load(String topicName) throws SQLException {
-            LOGGER.info(String.format("Getting topics project. topicName: %s", topicName));
+            LOGGER.info("Getting topics project. topicName: {}", topicName);
             return dbConnection.getTopicProject(topicName);
           }
         });
@@ -118,8 +119,8 @@ public class HopsAclAuthorizer implements Authorizer {
             String[] principalNameSplit = principalName.split(Consts.PROJECT_USER_DELIMITER);
             String projectName = principalNameSplit[0];
             String username = principalNameSplit[1];
-            LOGGER.info(String.format("Getting users project role. projectName: %s, username: %s",
-                projectName, username));
+            LOGGER.info("Getting users project role. projectName: {}, username: {}",
+                projectName, username);
             return dbConnection.getProjectRole(projectName, username);
           }
         });
@@ -130,8 +131,8 @@ public class HopsAclAuthorizer implements Authorizer {
           public String load(Pair<Integer, Integer> pair) throws SQLException {
             int topicProjectId = pair.getValue0();
             int userProjectId = pair.getValue1();
-            LOGGER.info(String.format("Getting project share permission. topicProjectId: %s, userProjectId: %s",
-                topicProjectId, userProjectId));
+            LOGGER.info("Getting project share permission. topicProjectId: {}, userProjectId: {}",
+                topicProjectId, userProjectId);
             return dbConnection.getSharedProject(userProjectId, topicProjectId);
           }
         });
@@ -155,33 +156,35 @@ public class HopsAclAuthorizer implements Authorizer {
     String host = requestContext.clientAddress().getHostAddress();
     ResourceType resourceType = action.resourcePattern().resourceType();
     String topicName = action.resourcePattern().name();
-    String principalName = principal.getName();
+    List<String> subjectNames = Arrays.asList(principal.getName().split(Consts.SEMI_COLON));
+    String principalName = getPrincipalName(subjectNames);
     AclOperation operation = action.operation();
 
-    LOGGER.debug("authorize :: session:" + requestContext);
-    LOGGER.debug("authorize :: principal.name:" + principalName);
-    LOGGER.debug("authorize :: principal.type:" + principal.getPrincipalType());
-    LOGGER.debug("authorize :: operation:" + operation);
-    LOGGER.debug("authorize :: host:" + host);
-    LOGGER.debug("authorize :: resource:" + resourceType);
-    LOGGER.debug("authorize :: topicName:" + topicName);
+    LOGGER.debug("authorize :: session: {}", requestContext);
+    LOGGER.debug("authorize :: subjectNames: {}", subjectNames);
+    LOGGER.debug("authorize :: principal.name: {}", principalName);
+    LOGGER.debug("authorize :: principal.type: {}", principal.getPrincipalType());
+    LOGGER.debug("authorize :: operation: {}", operation);
+    LOGGER.debug("authorize :: host: {}", host);
+    LOGGER.debug("authorize :: resource: {}", resourceType);
+    LOGGER.debug("authorize :: topicName: {}", topicName);
 
     if (principalName.equalsIgnoreCase(Consts.ANONYMOUS)) {
-      LOGGER.info("No Acl found for cluster authorization, user:" + principalName);
+      LOGGER.info("No Acl found for cluster authorization, user: {}", principalName);
       return AuthorizationResult.DENIED;
     }
 
-    if (isSuperUser(principal)) {
+    if (isSuperUser(subjectNames)) {
       return AuthorizationResult.ALLOWED;
     }
 
     if ("__consumer_offsets".equals(topicName)) {
-      LOGGER.debug("topic = " + topicName + " access allowed: " + consumerOffsetsAccessAllowed);
+      LOGGER.debug("topic = {} access allowed: {}", topicName, consumerOffsetsAccessAllowed);
       return consumerOffsetsAccessAllowed ? AuthorizationResult.ALLOWED : AuthorizationResult.DENIED;
     }
 
     if (resourceType.equals(ResourceType.CLUSTER)) {
-      LOGGER.info("This is cluster authorization for broker: " + principalName);
+      LOGGER.info("This is cluster authorization for broker: {}", principalName);
       return AuthorizationResult.DENIED;
     }
 
@@ -190,15 +193,15 @@ public class HopsAclAuthorizer implements Authorizer {
       String projectCN = principalName.split(Consts.PROJECT_USER_DELIMITER)[0];
       if (topicName.contains(Consts.PROJECT_USER_DELIMITER)) {
         String projectConsumerGroup = topicName.split(Consts.PROJECT_USER_DELIMITER)[0];
-        LOGGER.debug("Consumer group :: projectCN:" + projectCN);
-        LOGGER.debug("Consumer group :: projectConsumerGroup:" + projectConsumerGroup);
+        LOGGER.debug("Consumer group :: projectCN: {}", projectCN);
+        LOGGER.debug("Consumer group :: projectConsumerGroup: {}", projectConsumerGroup);
         //Check principal project name is equal to project consumer group
         if (!projectCN.equals(projectConsumerGroup)) {
-          LOGGER.info("Principal:" + principalName + " is not allowed to access group:" + topicName);
+          LOGGER.info("Principal: {} is not allowed to access group: {}", principalName, topicName);
           return AuthorizationResult.DENIED;
         }
       }
-      LOGGER.info("Principal:" + principalName + " is allowed to access group:" + topicName);
+      LOGGER.info("Principal: {} is allowed to access group: {}", principalName, topicName);
       return AuthorizationResult.ALLOWED;
     }
 
@@ -250,8 +253,8 @@ public class HopsAclAuthorizer implements Authorizer {
         }
       } catch (ExecutionException e) {
         tries--;
-        LOGGER.error(String.format("Failed to authorize user '%s' to perform '%s' on topic '%s', retries left: %s",
-            principalName, operation.toString(), topicName, tries), e.getCause());
+        LOGGER.error("Failed to authorize user '{}' to perform '{}' on topic '{}', retries left: {}",
+            principalName, operation.toString(), topicName, tries, e.getCause());
       } catch (CacheLoader.InvalidCacheLoadException e) {
         // This exception is thrown if cache result is 'null' (nothing in database)
         return AuthorizationResult.DENIED;
@@ -284,15 +287,19 @@ public class HopsAclAuthorizer implements Authorizer {
     }
   }
   
-  private boolean isSuperUser(KafkaPrincipal principal) {
-    // TODO(Fabio): This would benefit from some tests - My first attempt didn't work.
-    if (superUsers.stream().anyMatch(su -> su.getName().equals(principal.getName()))) {
+  protected boolean isSuperUser(List<String> subjectNames) {
+    // to be considered a super user there has to be an intersection between user subject names and super users
+    if (superUsers.stream().anyMatch(su -> subjectNames.contains(su.getName()))) {
       LOGGER.debug(
-          "principal = " + principal.getName() + " is a super user, allowing operation without checking acls.");
+          "principal = {} is a super user, allowing operation without checking acls.", getPrincipalName(subjectNames));
       return true;
     }
-    LOGGER.debug("principal = " + principal.getName() + " is not a super user.");
+    LOGGER.debug("principal = {} is not a super user.", getPrincipalName(subjectNames));
     return false;
+  }
+
+  private String getPrincipalName(List<String> subjectNames) {
+    return subjectNames.get(0); // the first cert name is principal name
   }
 
   @Override
