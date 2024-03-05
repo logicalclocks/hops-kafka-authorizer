@@ -19,6 +19,8 @@ import org.mockito.Mockito;
 
 import javax.security.auth.x500.X500Principal;
 import java.security.Principal;
+import java.util.Arrays;
+import java.util.List;
 
 public class TestHopsPrincipalBuilder {
 
@@ -58,5 +60,25 @@ public class TestHopsPrincipalBuilder {
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
     p = pb.build(null);
     Assertions.assertEquals("another_common_name", p.getName());
+  }
+
+  @Test
+  public void testX500PrincipleWithAlternativeNames() throws Exception {
+    // Arrange
+    HopsPrincipalBuilder realPB = new HopsPrincipalBuilder();
+    HopsPrincipalBuilder pb = Mockito.spy(realPB);
+    Principal originPrincipal = new X500Principal("OU=0,C=SE,O=organization,CN=my_common_name");
+    Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
+
+    List<String> alternativeNameList = Arrays.asList("another_common_name", "random_common_name");
+    Mockito.doReturn(alternativeNameList).when(pb).getAlternativeNames(Mockito.any());
+
+    // Arrange
+    Principal p = pb.build(null);
+
+    // Assert
+    Assertions.assertNotEquals(originPrincipal, p);
+    Assertions.assertTrue(p instanceof KafkaPrincipal);
+    Assertions.assertEquals("my_common_name;another_common_name;random_common_name", p.getName());
   }
 }
