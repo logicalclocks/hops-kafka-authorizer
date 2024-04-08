@@ -70,7 +70,7 @@ public class HopsPrincipalBuilder extends DefaultKafkaPrincipalBuilder {
 
       // get principle name
       Pattern pattern = Pattern.compile("CN=([^,]+)");
-      Matcher matcher = pattern.matcher(principal.toString());
+      Matcher matcher = pattern.matcher(principal.getName());
       if (!matcher.find()) {
         LOGGER.error("Failed to get common names");
       }
