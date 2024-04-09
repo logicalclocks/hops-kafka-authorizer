@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.kafka.common.KafkaException;
@@ -30,8 +32,6 @@ import org.apache.kafka.common.security.auth.SslAuthenticationContext;
 import org.apache.kafka.common.security.authenticator.DefaultKafkaPrincipalBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import sun.security.x509.X500Name;
 
 /**
  * Customized Principal Builder for Hopsworks.
@@ -59,15 +59,23 @@ public class HopsPrincipalBuilder extends DefaultKafkaPrincipalBuilder {
 
       Principal principal = getPrincipal(sslAuthenticationContext);
 
+      // check if ANONYMOUS
       String tlsUserName = principal.getName();
       if (tlsUserName.equalsIgnoreCase(Consts.ANONYMOUS)) {
         return KafkaPrincipal.ANONYMOUS;
       }
 
+      // get user type
       String userType = principal.toString().split(Consts.COLON_SEPARATOR)[0];
-      
-      X500Name name = new X500Name(tlsUserName);
-      String principleName = name.getCommonName();
+
+      // get principle name
+      Pattern pattern = Pattern.compile("CN=([^,]+)");
+      Matcher matcher = pattern.matcher(principal.getName());
+      if (!matcher.find()) {
+        LOGGER.error("Failed to get common names");
+      }
+      String principleName = matcher.group(1);
+
       // add alternative names to principal name
       List<String> alternativeNameList = getAlternativeNames(sslAuthenticationContext);
       for (String alternativeName: alternativeNameList) {
@@ -77,7 +85,7 @@ public class HopsPrincipalBuilder extends DefaultKafkaPrincipalBuilder {
       }
 
       return new KafkaPrincipal(userType, principleName);
-    } catch (IOException e) {
+    } catch (Exception e) {
       throw new KafkaException("Failed to build Kafka principal due to: ", e);
     }
   }
