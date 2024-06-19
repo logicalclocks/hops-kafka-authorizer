@@ -78,11 +78,7 @@ public class HopsAclAuthorizer implements Authorizer {
   public void configure(java.util.Map<String, ?> configs) {
     Object superUserObj = configs.get(Consts.SUPERUSERS_PROP);
     if (superUserObj != null) {
-      String superUsersStr = (String) superUserObj;
-      for (String user : superUsersStr.split(Consts.SEMI_COLON)) {
-        String[] userSplits = user.split(Consts.COLON_SEPARATOR);
-        superUsers.add(new KafkaPrincipal(userSplits[0], userSplits[1]));
-      }
+      setSuperUsers((String) superUserObj);
     }
 
     Object consumerOffsetsAccessAllowedObj = configs.get(Consts.CONSUMER_OFFSETS_ACCESS_ALLOWED);
@@ -307,9 +303,15 @@ public class HopsAclAuthorizer implements Authorizer {
     dbConnection.close();
   }
 
-  // For testing
-  public void setSuperUsers(Set<KafkaPrincipal> superUsers) {
-    this.superUsers = superUsers;
+  protected void setSuperUsers(String superUsersStr) {
+    for (String user : superUsersStr.split(Consts.SEMI_COLON)) {
+      if (user.isEmpty()) {
+        continue;
+      }
+      String[] userSplits = user.split(Consts.COLON_SEPARATOR);
+      superUsers.add(new KafkaPrincipal(userSplits[0], HopsPrincipalBuilder.getPrincipalName(userSplits[1])));
+    }
+    LOGGER.debug("superUsers = {}", superUsers);
   }
 
   // For testing
