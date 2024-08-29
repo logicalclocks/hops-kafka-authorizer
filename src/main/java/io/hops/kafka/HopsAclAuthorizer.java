@@ -277,6 +277,7 @@ public class HopsAclAuthorizer implements Authorizer {
   protected AuthorizationResult authorizeOperation(AclOperation operation, String userRole) {
     switch (operation) {
       case WRITE:
+      case IDEMPOTENT_WRITE:
       case CREATE:
         return Consts.DATA_OWNER.equals(userRole) ? AuthorizationResult.ALLOWED : AuthorizationResult.DENIED;
       case READ:
