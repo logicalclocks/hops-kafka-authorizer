@@ -14,6 +14,7 @@ package io.hops.kafka;
 
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -24,13 +25,19 @@ import java.util.List;
 
 public class TestHopsPrincipalBuilder {
 
+  private HopsPrincipalBuilder realPB;
+  private HopsPrincipalBuilder pb;
+
+  @BeforeEach
+  public void setup() {
+    realPB = new HopsPrincipalBuilder();
+    pb = Mockito.spy(realPB);
+  }
+
   @Test
   public void testAnonymousX500Principal() throws Exception {
     // Arrange
-    HopsPrincipalBuilder realPB = new HopsPrincipalBuilder();
-    HopsPrincipalBuilder pb = Mockito.spy(realPB);
     Principal originPrincipal = new KafkaPrincipal("User", Consts.ANONYMOUS);
-
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
 
     // Act
@@ -43,8 +50,6 @@ public class TestHopsPrincipalBuilder {
   @Test
   public void testX500Principle() throws Exception {
     // Arrange
-    HopsPrincipalBuilder realPB = new HopsPrincipalBuilder();
-    HopsPrincipalBuilder pb = Mockito.spy(realPB);
     Principal originPrincipal = new X500Principal("OU=0,C=SE,O=organization,CN=my_common_name");
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
 
@@ -65,8 +70,6 @@ public class TestHopsPrincipalBuilder {
   @Test
   public void testX500PrincipleWithAlternativeNames() throws Exception {
     // Arrange
-    HopsPrincipalBuilder realPB = new HopsPrincipalBuilder();
-    HopsPrincipalBuilder pb = Mockito.spy(realPB);
     Principal originPrincipal = new X500Principal("OU=0,C=SE,O=organization,CN=my_common_name");
     Mockito.doReturn(originPrincipal).when(pb).getPrincipal(Mockito.any());
 

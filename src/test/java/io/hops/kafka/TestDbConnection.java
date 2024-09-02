@@ -3,6 +3,7 @@ package io.hops.kafka;
 import com.zaxxer.hikari.HikariDataSource;
 import org.javatuples.Pair;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -16,21 +17,31 @@ import static org.mockito.ArgumentMatchers.anyString;
 
 public class TestDbConnection {
 
-  @Test
-  public void testGetTopicProject() throws SQLException {
-    // Arrange
-    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
-    Connection connection = Mockito.mock(Connection.class);
-    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
-    ResultSet resultSet = Mockito.mock(ResultSet.class);
+  private HikariDataSource datasource;
+  private Connection connection;
+  private PreparedStatement preparedStatement;
+  private ResultSet resultSet;
+  private DbConnection dbConnection;
+
+  @BeforeEach
+  public void setup() throws SQLException {
+    datasource = Mockito.mock(HikariDataSource.class);
+    connection = Mockito.mock(Connection.class);
+    preparedStatement = Mockito.mock(PreparedStatement.class);
+    resultSet = Mockito.mock(ResultSet.class);
 
     Mockito.when(datasource.getConnection()).thenReturn(connection);
     Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
     Mockito.when(preparedStatement.executeQuery()).thenReturn(resultSet);
+
+    dbConnection = new DbConnection(datasource);
+  }
+
+  @Test
+  public void testGetTopicProject() throws SQLException {
+    // Arrange
     Mockito.when(resultSet.next()).thenReturn(true).thenReturn(false);
     Mockito.when(resultSet.getInt(anyInt())).thenReturn(123);
-
-    DbConnection dbConnection = new DbConnection(datasource);
 
     // Act
     int topicProjectId = dbConnection.getTopicProject("test_topic");
@@ -46,17 +57,7 @@ public class TestDbConnection {
   @Test
   public void testGetTopicProjectNull() throws SQLException {
     // Arrange
-    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
-    Connection connection = Mockito.mock(Connection.class);
-    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
-    ResultSet resultSet = Mockito.mock(ResultSet.class);
-
-    Mockito.when(datasource.getConnection()).thenReturn(connection);
-    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
-    Mockito.when(preparedStatement.executeQuery()).thenReturn(resultSet);
     Mockito.when(resultSet.next()).thenReturn(false);
-
-    DbConnection dbConnection = new DbConnection(datasource);
 
     // Act
     Integer topicProjectId = dbConnection.getTopicProject("test_topic");
@@ -72,18 +73,7 @@ public class TestDbConnection {
   @Test
   public void testGetTopicProjectFail() throws SQLException {
     // Arrange
-    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
-    Connection connection = Mockito.mock(Connection.class);
-    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
-    ResultSet resultSet = Mockito.mock(ResultSet.class);
-
-    Mockito.when(datasource.getConnection()).thenReturn(connection);
-    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
     Mockito.when(preparedStatement.executeQuery()).thenThrow(new SQLException());
-    Mockito.when(resultSet.next()).thenReturn(true).thenReturn(false);
-    Mockito.when(resultSet.getInt(anyInt())).thenReturn(123);
-
-    DbConnection dbConnection = new DbConnection(datasource);
 
     // Act
     int topicProjectId = 0;
@@ -104,19 +94,9 @@ public class TestDbConnection {
   @Test
   public void testGetProjectRole() throws SQLException {
     // Arrange
-    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
-    Connection connection = Mockito.mock(Connection.class);
-    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
-    ResultSet resultSet = Mockito.mock(ResultSet.class);
-
-    Mockito.when(datasource.getConnection()).thenReturn(connection);
-    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
-    Mockito.when(preparedStatement.executeQuery()).thenReturn(resultSet);
     Mockito.when(resultSet.next()).thenReturn(true).thenReturn(false);
     Mockito.when(resultSet.getInt(1)).thenReturn(123);
     Mockito.when(resultSet.getString(2)).thenReturn("example_role");
-
-    DbConnection dbConnection = new DbConnection(datasource);
 
     // Act
     Pair<Integer, String> pair = dbConnection.getProjectRole("test_project_name", "test_username");
@@ -133,17 +113,7 @@ public class TestDbConnection {
   @Test
   public void testGetProjectRoleNull() throws SQLException {
     // Arrange
-    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
-    Connection connection = Mockito.mock(Connection.class);
-    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
-    ResultSet resultSet = Mockito.mock(ResultSet.class);
-
-    Mockito.when(datasource.getConnection()).thenReturn(connection);
-    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
-    Mockito.when(preparedStatement.executeQuery()).thenReturn(resultSet);
     Mockito.when(resultSet.next()).thenReturn(false);
-
-    DbConnection dbConnection = new DbConnection(datasource);
 
     // Act
     Pair<Integer, String> pair = dbConnection.getProjectRole("test_project_name", "test_username");
@@ -159,19 +129,7 @@ public class TestDbConnection {
   @Test
   public void testGetProjectRoleFail() throws SQLException {
     // Arrange
-    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
-    Connection connection = Mockito.mock(Connection.class);
-    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
-    ResultSet resultSet = Mockito.mock(ResultSet.class);
-
-    Mockito.when(datasource.getConnection()).thenReturn(connection);
-    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
     Mockito.when(preparedStatement.executeQuery()).thenThrow(new SQLException());
-    Mockito.when(resultSet.next()).thenReturn(true).thenReturn(false);
-    Mockito.when(resultSet.getInt(1)).thenReturn(123);
-    Mockito.when(resultSet.getString(2)).thenReturn("example_role");
-
-    DbConnection dbConnection = new DbConnection(datasource);
 
     // Act
     Pair<Integer, String> pair = new Pair<>(0, "");
@@ -193,18 +151,8 @@ public class TestDbConnection {
   @Test
   public void testGetSharedProject() throws SQLException {
     // Arrange
-    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
-    Connection connection = Mockito.mock(Connection.class);
-    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
-    ResultSet resultSet = Mockito.mock(ResultSet.class);
-
-    Mockito.when(datasource.getConnection()).thenReturn(connection);
-    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
-    Mockito.when(preparedStatement.executeQuery()).thenReturn(resultSet);
     Mockito.when(resultSet.next()).thenReturn(true).thenReturn(false);
     Mockito.when(resultSet.getString(anyInt())).thenReturn("example_permission");
-
-    DbConnection dbConnection = new DbConnection(datasource);
 
     // Act
     String permission = dbConnection.getSharedProject(119, 120);
@@ -220,17 +168,7 @@ public class TestDbConnection {
   @Test
   public void testGetSharedProjectNull() throws SQLException {
     // Arrange
-    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
-    Connection connection = Mockito.mock(Connection.class);
-    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
-    ResultSet resultSet = Mockito.mock(ResultSet.class);
-
-    Mockito.when(datasource.getConnection()).thenReturn(connection);
-    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
-    Mockito.when(preparedStatement.executeQuery()).thenReturn(resultSet);
     Mockito.when(resultSet.next()).thenReturn(false);
-
-    DbConnection dbConnection = new DbConnection(datasource);
 
     // Act
     String permission = dbConnection.getSharedProject(119, 120);
@@ -246,18 +184,7 @@ public class TestDbConnection {
   @Test
   public void testGetSharedProjectFail() throws SQLException {
     // Arrange
-    HikariDataSource datasource = Mockito.mock(HikariDataSource.class);
-    Connection connection = Mockito.mock(Connection.class);
-    PreparedStatement preparedStatement = Mockito.mock(PreparedStatement.class);
-    ResultSet resultSet = Mockito.mock(ResultSet.class);
-
-    Mockito.when(datasource.getConnection()).thenReturn(connection);
-    Mockito.when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
     Mockito.when(preparedStatement.executeQuery()).thenThrow(new SQLException());
-    Mockito.when(resultSet.next()).thenReturn(true).thenReturn(false);
-    Mockito.when(resultSet.getString(anyInt())).thenReturn("example_permission");
-
-    DbConnection dbConnection = new DbConnection(datasource);
 
     // Act
     String permission = "";
