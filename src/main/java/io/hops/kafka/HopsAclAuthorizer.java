@@ -176,19 +176,29 @@ public class HopsAclAuthorizer implements Authorizer {
 
   public AuthorizationResult authorize(String principalName, Action action) {
     ResourceType resourceType = action.resourcePattern().resourceType();
-    String topicName = action.resourcePattern().name();
+    String resourceName = action.resourcePattern().name();
     AclOperation operation = action.operation();
 
-    LOGGER.debug("authorize :: operation: {}", operation);
-    LOGGER.debug("authorize :: resource: {}", resourceType);
-    LOGGER.debug("authorize :: topicName: {}", topicName);
+    LOGGER.info("User '{}' performs '{}' on resource '{}' named '{}'",
+      principalName, operation.toString(), resourceType, resourceName);
 
-    if ("__consumer_offsets".equals(topicName)) {
-      LOGGER.debug("topic = {} access allowed: {}", topicName, consumerOffsetsAccessAllowed);
-      return consumerOffsetsAccessAllowed ? AuthorizationResult.ALLOWED : AuthorizationResult.DENIED;
+    switch (resourceType) {
+      case CLUSTER:
+        if (operation.equals(AclOperation.IDEMPOTENT_WRITE)) {
+          return AuthorizationResult.ALLOWED;
+        }
+        return AuthorizationResult.DENIED;
+      case GROUP:
+        return AuthorizationResult.ALLOWED;
+      case TOPIC:
+        if ("__consumer_offsets".equals(resourceName)) {
+          return consumerOffsetsAccessAllowed ? AuthorizationResult.ALLOWED : AuthorizationResult.DENIED;
+        }
+    
+        return authorizeProjectUser(resourceName, principalName, operation);
+      default:
+        return AuthorizationResult.DENIED;
     }
-
-    return authorizeProjectUser(topicName, principalName, operation);
   }
 
   @Override
@@ -228,13 +238,11 @@ public class HopsAclAuthorizer implements Authorizer {
 
         if (topicProjectId == userProjectId) {
           // Working on the same project
-          LOGGER.debug("User '{}' performs '{}' on topic '{}'",
-            principalName, operation.toString(), topicName, tries);
+          LOGGER.debug("Topic: '{}' on the same project", topicName);
           return authorizeOperation(operation, userRole);
         } else {
           // Working on the shared project
-          LOGGER.debug("User '{}' performs '{}' on shared topic '{}'",
-            principalName, operation.toString(), topicName, tries);
+          LOGGER.debug("Topic: '{}' on shared project", topicName);
           String sharePermission = projectShare.get(new Pair<>(topicProjectId, userProjectId));
           return authorizePermission(operation, sharePermission);
         }
@@ -264,7 +272,6 @@ public class HopsAclAuthorizer implements Authorizer {
   protected AuthorizationResult authorizeOperation(AclOperation operation, String userRole) {
     switch (operation) {
       case WRITE:
-      case IDEMPOTENT_WRITE:
       case CREATE:
         return Consts.DATA_OWNER.equals(userRole) ? AuthorizationResult.ALLOWED : AuthorizationResult.DENIED;
       case READ:
