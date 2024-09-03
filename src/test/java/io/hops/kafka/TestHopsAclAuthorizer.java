@@ -49,7 +49,7 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testAuthorizeRejectAnonymous() throws UnknownHostException {
     // Arrange
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
     RequestContext requestContext = buildRequestContext(KafkaPrincipal.ANONYMOUS);
 
     // Act
@@ -65,7 +65,7 @@ public class TestHopsAclAuthorizer {
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
     hopsAclAuthorizer.setSuperUsers(kafkaPrincipal.getPrincipalType() + ":" + kafkaPrincipal.getName());
 
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
     RequestContext requestContext = buildRequestContext(kafkaPrincipal);
 
     // Act
@@ -80,7 +80,7 @@ public class TestHopsAclAuthorizer {
     // Arrange
     Mockito.when(topicProjectCache.get(anyString())).thenThrow(new CacheLoader.InvalidCacheLoadException(""));
 
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
     AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
@@ -97,7 +97,7 @@ public class TestHopsAclAuthorizer {
     // Arrange
     Mockito.when(topicProjectCache.get(anyString())).thenThrow(new ExecutionException(new SQLException()));
 
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
     AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
@@ -115,7 +115,7 @@ public class TestHopsAclAuthorizer {
     Mockito.when(topicProjectCache.get(anyString())).thenReturn(120);
     Mockito.when(userProjectCache.get(anyString())).thenThrow(new CacheLoader.InvalidCacheLoadException(""));
 
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
     AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
@@ -133,7 +133,7 @@ public class TestHopsAclAuthorizer {
     Mockito.when(topicProjectCache.get(anyString())).thenReturn(120);
     Mockito.when(userProjectCache.get(anyString())).thenThrow(new ExecutionException(new SQLException()));
 
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
     AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
@@ -152,7 +152,7 @@ public class TestHopsAclAuthorizer {
     Mockito.when(userProjectCache.get(anyString())).thenReturn(new Pair<>(119, Consts.DATA_OWNER));
     Mockito.when(projectShareCache.get(any())).thenThrow(new CacheLoader.InvalidCacheLoadException(""));
 
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
     AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
@@ -171,7 +171,7 @@ public class TestHopsAclAuthorizer {
     Mockito.when(userProjectCache.get(anyString())).thenReturn(new Pair<>(119, Consts.DATA_OWNER));
     Mockito.when(projectShareCache.get(any())).thenThrow(new ExecutionException(new SQLException()));
 
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
     AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
@@ -185,29 +185,38 @@ public class TestHopsAclAuthorizer {
 
   @ParameterizedTest
   @CsvSource({
-      // Same project
-      "119, 119, Data owner,      Write,    , ALLOWED",
-      "119, 119, Data scientist,  Write,    , DENIED",
-      "119, 119, Data owner,      Read,     , ALLOWED",
-      "119, 119, Data scientist,  Read,     , ALLOWED",
-      "119, 119, Data owner,      Describe, , ALLOWED",
-      "119, 119, Data scientist,  Describe, , ALLOWED",
-      // Shared with READ_ONLY permission
-      "119, 120, Data owner,      Write,    READ_ONLY,  DENIED",
-      "119, 120, Data scientist,  Write,    READ_ONLY,  DENIED",
-      "119, 120, Data owner,      Read,     READ_ONLY,  ALLOWED",
-      "119, 120, Data scientist,  Read,     READ_ONLY,  ALLOWED",
-      "119, 120, Data owner,      Describe, READ_ONLY,  ALLOWED",
-      "119, 120, Data scientist,  Describe, READ_ONLY,  ALLOWED",
-      // Shared with not supported permission
-      "119, 120, Data owner,      Write,    EDITABLE,   DENIED",
-      "119, 120, Data scientist,  Write,    EDITABLE,   DENIED",
-      "119, 120, Data owner,      Read,     EDITABLE,   DENIED",
-      "119, 120, Data scientist,  Read,     EDITABLE,   DENIED",
-      "119, 120, Data owner,      Describe, EDITABLE,   DENIED",
-      "119, 120, Data scientist,  Describe, EDITABLE,   DENIED"
+      // TOPIC (project matters only for topics)
+        // Same project
+      "119, 119, Data owner,      Write,  TOPIC,    , ALLOWED",
+      "119, 119, Data scientist,  Write,  TOPIC,    , DENIED",
+      "119, 119, Data owner,      Read,  TOPIC,     , ALLOWED",
+      "119, 119, Data scientist,  Read,  TOPIC,     , ALLOWED",
+      "119, 119, Data owner,      Describe,  TOPIC, , ALLOWED",
+      "119, 119, Data scientist,  Describe,  TOPIC, , ALLOWED",
+        // Shared with READ_ONLY permission
+      "119, 120, Data owner,      Write,  TOPIC,    READ_ONLY,  DENIED",
+      "119, 120, Data scientist,  Write,  TOPIC,    READ_ONLY,  DENIED",
+      "119, 120, Data owner,      Read,  TOPIC,     READ_ONLY,  ALLOWED",
+      "119, 120, Data scientist,  Read,  TOPIC,     READ_ONLY,  ALLOWED",
+      "119, 120, Data owner,      Describe,  TOPIC, READ_ONLY,  ALLOWED",
+      "119, 120, Data scientist,  Describe,  TOPIC, READ_ONLY,  ALLOWED",
+        // Shared with not supported permission
+      "119, 120, Data owner,      Write,  TOPIC,    EDITABLE,   DENIED",
+      "119, 120, Data scientist,  Write,  TOPIC,    EDITABLE,   DENIED",
+      "119, 120, Data owner,      Read,  TOPIC,     EDITABLE,   DENIED",
+      "119, 120, Data scientist,  Read,  TOPIC,     EDITABLE,   DENIED",
+      "119, 120, Data owner,      Describe,  TOPIC, EDITABLE,   DENIED",
+      "119, 120, Data scientist,  Describe,  TOPIC, EDITABLE,   DENIED",
+      // GROUP
+      "119, 119, Data owner,      Read,  GROUP,     , ALLOWED",
+      "119, 119, Data scientist,  Read,  GROUP,     , ALLOWED",
+      // CLUSTER (only IDEMPOTENT_WRITE is allowed)
+      "119, 119, Data owner,      IDEMPOTENT_WRITE,  CLUSTER, , ALLOWED",
+      "119, 119, Data scientist,  IDEMPOTENT_WRITE,  CLUSTER, , ALLOWED",
+      "119, 119, Data owner,      Write,  CLUSTER, , DENIED",
+      "119, 119, Data scientist,  Write,  CLUSTER, , DENIED",
   })
-  public void testAuthorizeAllow(int topicProjectId, int userProjectId, String projectRole, String operationType,
+  public void testAuthorizeAllow(int topicProjectId, int userProjectId, String projectRole, String operationName, String resourceName,
                                  String sharePermission, String expectedResult)
       throws UnknownHostException, ExecutionException {
     // Arrange
@@ -215,17 +224,19 @@ public class TestHopsAclAuthorizer {
     Mockito.when(userProjectCache.get(anyString())).thenReturn(new Pair<>(userProjectId, projectRole));
     Mockito.when(projectShareCache.get(any())).thenReturn(sharePermission);
 
-    Action action = buildAction(operationType, "test");
+    Action action = buildAction(operationName, resourceName, "test");
 
     // Act
     AuthorizationResult result = hopsAclAuthorizer.authorize("project__user", action);
 
     // Assert
     Assertions.assertEquals(AuthorizationResult.valueOf(expectedResult), result);
-    Mockito.verify(topicProjectCache, Mockito.times(1)).get(anyString());
-    Mockito.verify(userProjectCache, Mockito.times(1)).get(anyString());
-    if (sharePermission != null) {
-      Mockito.verify(projectShareCache, Mockito.times(1)).get(any());
+    if (ResourceType.TOPIC.equals(ResourceType.fromString(resourceName))) {
+      Mockito.verify(topicProjectCache, Mockito.times(1)).get(anyString());
+      Mockito.verify(userProjectCache, Mockito.times(1)).get(anyString());
+      if (sharePermission != null) {
+        Mockito.verify(projectShareCache, Mockito.times(1)).get(any());
+      }
     }
   }
 
@@ -274,10 +285,10 @@ public class TestHopsAclAuthorizer {
         false);
   }
 
-  private Action buildAction(String operationName, String topicName) {
+  private Action buildAction(String operationName, String resourceName, String topicName) {
     return new Action(
         AclOperation.fromString(operationName),
-        new ResourcePattern(ResourceType.TOPIC, topicName, PatternType.LITERAL),
+        new ResourcePattern(ResourceType.fromString(resourceName), topicName, PatternType.LITERAL),
         0, false, false
     );
   }
