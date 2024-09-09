@@ -2,11 +2,9 @@ package io.hops.kafka;
 
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import kafka.network.RequestChannel;
 import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.requests.RequestContext;
 import org.apache.kafka.common.resource.PatternType;
-import org.apache.kafka.common.resource.Resource;
 import org.apache.kafka.common.resource.ResourcePattern;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -24,9 +22,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.sql.SQLException;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -68,11 +64,8 @@ public class TestHopsAclAuthorizer {
     LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
 
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
-    Set<KafkaPrincipal> superUsers = new HashSet<>();
-    superUsers.add(kafkaPrincipal);
-
     HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
-    hopsAclAuthorizer.setSuperUsers(superUsers);
+    hopsAclAuthorizer.setSuperUsers(kafkaPrincipal.getPrincipalType() + ":" + kafkaPrincipal.getName());
 
     Action action = buildAction("describe", "test");
     RequestContext requestContext = buildRequestContext(kafkaPrincipal);
@@ -245,27 +238,27 @@ public class TestHopsAclAuthorizer {
   @ParameterizedTest
   @CsvSource({
       // super user
-      "user, user, true",
-      "user, user;user1;user2, true",
-      "user;user1;user2, user, true",
-      "user;user1;user2, user;user3;user5, true",
+      "user, principal_type:user, true",
+      "user, 'principal_type:CN=user,O=io.strimzi', true",
+      "user, principal_type:user;principal_type:user1;principal_type:user2, true",
+      // super user with alternative name
+      "user;user1;user2, principal_type:user, true",
+      "user;user1;user2, 'principal_type:CN=user,O=io.strimzi;principal_type:CN=user3,O=io.strimzi', true",
+      "user;user1;user2, principal_type:user;principal_type:user3;principal_type:user5, true",
       // not super user
       "user, '', false",
-      "user, user1, false",
-      "user3, user;user1;user2, false",
-      "user;user1;user2, user3, false",
-      "user;user1;user2, user3;user4;user5, false"
+      "user, principal_type:user1, false",
+      "user, 'principal_type:CN=user1,O=io.strimzi', false",
+      "user3, principal_type:user;principal_type:user1;principal_type:user2, false",
+      // not super user with alternative name
+      "user;user1;user2, principal_type:user3, false",
+      "user;user1;user2, 'principal_type:CN=user3,O=io.strimzi;principal_type:CN=user4,O=io.strimzi', false",
+      "user;user1;user2, principal_type:user3;principal_type:user4;principal_type:user5, false"
   })
   public void testIsSuperUser(String principalName, String superUsersStr, boolean expectedResult) {
     // Arrange
-    Set<KafkaPrincipal> superUserSet = new HashSet<>();
-    for (String user : superUsersStr.split(Consts.SEMI_COLON)) {
-      KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("principal_type", user);
-      superUserSet.add(kafkaPrincipal);
-    }
-
     HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(null, null, null);
-    hopsAclAuthorizer.setSuperUsers(superUserSet);
+    hopsAclAuthorizer.setSuperUsers(superUsersStr);
 
     List<String> subjectNames = Arrays.asList(principalName.split(Consts.SEMI_COLON));
 

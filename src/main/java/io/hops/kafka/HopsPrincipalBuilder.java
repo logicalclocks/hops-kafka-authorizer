@@ -69,12 +69,7 @@ public class HopsPrincipalBuilder extends DefaultKafkaPrincipalBuilder {
       String userType = principal.toString().split(Consts.COLON_SEPARATOR)[0];
 
       // get principle name
-      Pattern pattern = Pattern.compile("CN=([^,]+)");
-      Matcher matcher = pattern.matcher(principal.getName());
-      if (!matcher.find()) {
-        LOGGER.error("Failed to get common names");
-      }
-      String principleName = matcher.group(1);
+      String principleName = getPrincipalName(principal.getName());
 
       // add alternative names to principal name
       List<String> alternativeNameList = getAlternativeNames(sslAuthenticationContext);
@@ -118,5 +113,14 @@ public class HopsPrincipalBuilder extends DefaultKafkaPrincipalBuilder {
     return altNames.stream()
         .map(entry -> entry.get(1).toString())
         .collect(Collectors.toList());
+  }
+
+  protected static String getPrincipalName(String tlsUserName) {
+    Pattern pattern = Pattern.compile("CN=([^,]+)");
+    Matcher matcher = pattern.matcher(tlsUserName);
+    if (!matcher.find()) {
+      return tlsUserName;
+    }
+    return matcher.group(1);
   }
 }
