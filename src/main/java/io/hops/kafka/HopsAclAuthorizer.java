@@ -63,10 +63,12 @@ public class HopsAclAuthorizer implements Authorizer {
   // For testing
   protected HopsAclAuthorizer(LoadingCache<String, Integer> topicProjectCache,
                               LoadingCache<String, Pair<Integer, String>> userProjectCache,
-                              LoadingCache<Pair<Integer, Integer>, String> projectShareCache) {
-    topicProject = topicProjectCache;
-    userProject = userProjectCache;
-    projectShare = projectShareCache;
+                              LoadingCache<Pair<Integer, Integer>, String> projectShareCache,
+                              DbConnection dbConnection) {
+    this.topicProject = topicProjectCache;
+    this.userProject = userProjectCache;
+    this.projectShare = projectShareCache;
+    this.dbConnection = dbConnection;
   }
 
   /**
@@ -141,67 +143,62 @@ public class HopsAclAuthorizer implements Authorizer {
   }
 
   @Override
-  public List<AuthorizationResult> authorize(AuthorizableRequestContext authorizableRequestContext, List<Action> list) {
-    return list.stream()
-        .map(a -> authorize(authorizableRequestContext, a))
-        .collect(Collectors.toList());
-  }
-
-  public AuthorizationResult authorize(AuthorizableRequestContext requestContext, Action action) {
+  public List<AuthorizationResult> authorize(AuthorizableRequestContext requestContext, List<Action> list) {
     KafkaPrincipal principal = requestContext.principal();
     String host = requestContext.clientAddress().getHostAddress();
-    ResourceType resourceType = action.resourcePattern().resourceType();
-    String topicName = action.resourcePattern().name();
     List<String> subjectNames = Arrays.asList(principal.getName().split(Consts.SEMI_COLON));
     String principalName = getPrincipalName(subjectNames);
-    AclOperation operation = action.operation();
 
     LOGGER.debug("authorize :: session: {}", requestContext);
     LOGGER.debug("authorize :: subjectNames: {}", subjectNames);
     LOGGER.debug("authorize :: principal.name: {}", principalName);
     LOGGER.debug("authorize :: principal.type: {}", principal.getPrincipalType());
-    LOGGER.debug("authorize :: operation: {}", operation);
     LOGGER.debug("authorize :: host: {}", host);
-    LOGGER.debug("authorize :: resource: {}", resourceType);
-    LOGGER.debug("authorize :: topicName: {}", topicName);
 
     if (principalName.equalsIgnoreCase(Consts.ANONYMOUS)) {
       LOGGER.info("No Acl found for cluster authorization, user: {}", principalName);
-      return AuthorizationResult.DENIED;
+      return list.stream()
+        .map(a -> AuthorizationResult.DENIED)
+        .collect(Collectors.toList());
     }
 
     if (isSuperUser(subjectNames)) {
-      return AuthorizationResult.ALLOWED;
+      LOGGER.info("Super user cluster authorization, user: {}", principalName);
+      return list.stream()
+        .map(a -> AuthorizationResult.ALLOWED)
+        .collect(Collectors.toList());
     }
 
-    if ("__consumer_offsets".equals(topicName)) {
-      LOGGER.debug("topic = {} access allowed: {}", topicName, consumerOffsetsAccessAllowed);
-      return consumerOffsetsAccessAllowed ? AuthorizationResult.ALLOWED : AuthorizationResult.DENIED;
-    }
+    return list.stream()
+        .map(a -> authorize(principalName, a))
+        .collect(Collectors.toList());
+  }
 
-    if (resourceType.equals(ResourceType.CLUSTER)) {
-      LOGGER.info("This is cluster authorization for broker: {}", principalName);
-      return AuthorizationResult.DENIED;
-    }
+  public AuthorizationResult authorize(String principalName, Action action) {
+    ResourceType resourceType = action.resourcePattern().resourceType();
+    String resourceName = action.resourcePattern().name();
+    AclOperation operation = action.operation();
 
-    if (resourceType.equals(ResourceType.GROUP)) {
-      //Check if group requested starts with projectname__ and is equal to the current users project
-      String projectCN = principalName.split(Consts.PROJECT_USER_DELIMITER)[0];
-      if (topicName.contains(Consts.PROJECT_USER_DELIMITER)) {
-        String projectConsumerGroup = topicName.split(Consts.PROJECT_USER_DELIMITER)[0];
-        LOGGER.debug("Consumer group :: projectCN: {}", projectCN);
-        LOGGER.debug("Consumer group :: projectConsumerGroup: {}", projectConsumerGroup);
-        //Check principal project name is equal to project consumer group
-        if (!projectCN.equals(projectConsumerGroup)) {
-          LOGGER.info("Principal: {} is not allowed to access group: {}", principalName, topicName);
-          return AuthorizationResult.DENIED;
+    LOGGER.info("User '{}' performs '{}' on resource '{}' named '{}'",
+      principalName, operation.toString(), resourceType, resourceName);
+
+    switch (resourceType) {
+      case CLUSTER:
+        if (operation.equals(AclOperation.IDEMPOTENT_WRITE)) {
+          return AuthorizationResult.ALLOWED;
         }
-      }
-      LOGGER.info("Principal: {} is allowed to access group: {}", principalName, topicName);
-      return AuthorizationResult.ALLOWED;
+        return AuthorizationResult.DENIED;
+      case GROUP:
+        return AuthorizationResult.ALLOWED;
+      case TOPIC:
+        if ("__consumer_offsets".equals(resourceName)) {
+          return consumerOffsetsAccessAllowed ? AuthorizationResult.ALLOWED : AuthorizationResult.DENIED;
+        }
+    
+        return authorizeProjectUser(resourceName, principalName, operation);
+      default:
+        return AuthorizationResult.DENIED;
     }
-
-    return authorizeProjectUser(topicName, principalName, operation);
   }
 
   @Override
@@ -241,9 +238,11 @@ public class HopsAclAuthorizer implements Authorizer {
 
         if (topicProjectId == userProjectId) {
           // Working on the same project
+          LOGGER.debug("Topic: '{}' on the same project", topicName);
           return authorizeOperation(operation, userRole);
         } else {
           // Working on the shared project
+          LOGGER.debug("Topic: '{}' on shared project", topicName);
           String sharePermission = projectShare.get(new Pair<>(topicProjectId, userProjectId));
           return authorizePermission(operation, sharePermission);
         }
@@ -312,10 +311,5 @@ public class HopsAclAuthorizer implements Authorizer {
       superUsers.add(new KafkaPrincipal(userSplits[0], HopsPrincipalBuilder.getPrincipalName(userSplits[1])));
     }
     LOGGER.debug("superUsers = {}", superUsers);
-  }
-
-  // For testing
-  public void setDbConnection(DbConnection dbConnection) {
-    this.dbConnection = dbConnection;
   }
 }

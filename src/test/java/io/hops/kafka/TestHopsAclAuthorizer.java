@@ -31,26 +31,29 @@ import static org.mockito.ArgumentMatchers.anyString;
 public class TestHopsAclAuthorizer {
 
   private DbConnection dbConnection;
+  private LoadingCache<String, Integer> topicProjectCache;
+  private LoadingCache<String, Pair<Integer, String>> userProjectCache;
+  private LoadingCache<Pair<Integer, Integer>, String> projectShareCache;
+  private HopsAclAuthorizer hopsAclAuthorizer;
 
   @BeforeEach
   public void setup() {
+    topicProjectCache = Mockito.mock(LoadingCache.class);
+    userProjectCache = Mockito.mock(LoadingCache.class);
+    projectShareCache = Mockito.mock(LoadingCache.class);
     dbConnection = Mockito.mock(DbConnection.class);
+
+    hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache, dbConnection);
   }
 
   @Test
   public void testAuthorizeRejectAnonymous() throws UnknownHostException {
     // Arrange
-    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
-
-    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
-
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
     RequestContext requestContext = buildRequestContext(KafkaPrincipal.ANONYMOUS);
 
     // Act
-    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize(requestContext, action);
+    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize(requestContext, Arrays.asList(action)).get(0);
 
     // Assert
     Assertions.assertEquals(AuthorizationResult.DENIED, authorizationResult);
@@ -59,19 +62,14 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testAuthorizeSuperUser() throws UnknownHostException {
     // Arrange
-    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
-
     KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
-    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
     hopsAclAuthorizer.setSuperUsers(kafkaPrincipal.getPrincipalType() + ":" + kafkaPrincipal.getName());
 
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
     RequestContext requestContext = buildRequestContext(kafkaPrincipal);
 
     // Act
-    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize(requestContext, action);
+    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize(requestContext, Arrays.asList(action)).get(0);
 
     // Assert
     Assertions.assertEquals(AuthorizationResult.ALLOWED, authorizationResult);
@@ -80,21 +78,12 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testAuthorizeMissingTopic() throws UnknownHostException, ExecutionException {
     // Arrange
-    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
-
     Mockito.when(topicProjectCache.get(anyString())).thenThrow(new CacheLoader.InvalidCacheLoadException(""));
 
-    KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
-    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
-    hopsAclAuthorizer.setDbConnection(dbConnection);
-
-    RequestContext requestContext = buildRequestContext(kafkaPrincipal);
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
-    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize(requestContext, action);
+    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
 
     // Assert
     Assertions.assertEquals(AuthorizationResult.DENIED, authorizationResult);
@@ -106,21 +95,12 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testAuthorizeTopicException() throws UnknownHostException, ExecutionException {
     // Arrange
-    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
-
     Mockito.when(topicProjectCache.get(anyString())).thenThrow(new ExecutionException(new SQLException()));
 
-    KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
-    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
-    hopsAclAuthorizer.setDbConnection(dbConnection);
-
-    RequestContext requestContext = buildRequestContext(kafkaPrincipal);
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
-    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize(requestContext, action);
+    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
 
     // Assert
     Assertions.assertEquals(AuthorizationResult.DENIED, authorizationResult);
@@ -132,21 +112,13 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testAuthorizeMissingPrincipal() throws UnknownHostException, ExecutionException {
     // Arrange
-    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
-
     Mockito.when(topicProjectCache.get(anyString())).thenReturn(120);
     Mockito.when(userProjectCache.get(anyString())).thenThrow(new CacheLoader.InvalidCacheLoadException(""));
 
-    KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
-    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
-
-    RequestContext requestContext = buildRequestContext(kafkaPrincipal);
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
-    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize(requestContext, action);
+    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
 
     // Assert
     Assertions.assertEquals(AuthorizationResult.DENIED, authorizationResult);
@@ -158,21 +130,13 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testAuthorizePrincipalException() throws UnknownHostException, ExecutionException {
     // Arrange
-    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
-
     Mockito.when(topicProjectCache.get(anyString())).thenReturn(120);
     Mockito.when(userProjectCache.get(anyString())).thenThrow(new ExecutionException(new SQLException()));
 
-    KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
-    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
-
-    RequestContext requestContext = buildRequestContext(kafkaPrincipal);
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
-    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize(requestContext, action);
+    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
 
     // Assert
     Assertions.assertEquals(AuthorizationResult.DENIED, authorizationResult);
@@ -184,22 +148,14 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testAuthorizeMissingShared() throws UnknownHostException, ExecutionException {
     // Arrange
-    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
-
     Mockito.when(topicProjectCache.get(anyString())).thenReturn(120);
     Mockito.when(userProjectCache.get(anyString())).thenReturn(new Pair<>(119, Consts.DATA_OWNER));
     Mockito.when(projectShareCache.get(any())).thenThrow(new CacheLoader.InvalidCacheLoadException(""));
 
-    KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
-    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
-
-    RequestContext requestContext = buildRequestContext(kafkaPrincipal);
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
-    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize(requestContext, action);
+    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
 
     // Assert
     Assertions.assertEquals(AuthorizationResult.DENIED, authorizationResult);
@@ -211,28 +167,83 @@ public class TestHopsAclAuthorizer {
   @Test
   public void testAuthorizeSharedException() throws UnknownHostException, ExecutionException {
     // Arrange
-    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
-
     Mockito.when(topicProjectCache.get(anyString())).thenReturn(120);
     Mockito.when(userProjectCache.get(anyString())).thenReturn(new Pair<>(119, Consts.DATA_OWNER));
     Mockito.when(projectShareCache.get(any())).thenThrow(new ExecutionException(new SQLException()));
 
-    KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "sudo");
-    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
-
-    RequestContext requestContext = buildRequestContext(kafkaPrincipal);
-    Action action = buildAction("describe", "test");
+    Action action = buildAction("describe", "TOPIC", "test");
 
     // Act
-    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize(requestContext, action);
+    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
 
     // Assert
     Assertions.assertEquals(AuthorizationResult.DENIED, authorizationResult);
     Mockito.verify(topicProjectCache, Mockito.times(2)).get(anyString());
     Mockito.verify(userProjectCache, Mockito.times(2)).get(anyString());
     Mockito.verify(projectShareCache, Mockito.times(2)).get(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+      // TOPIC (project matters only for topics)
+        // Same project
+      "119, 119, Data owner,      WRITE,  TOPIC,    , ALLOWED",
+      "119, 119, Data scientist,  WRITE,  TOPIC,    , DENIED",
+      "119, 119, Data owner,      CREATE,  TOPIC,    , ALLOWED",
+      "119, 119, Data scientist,  CREATE,  TOPIC,    , DENIED",
+      "119, 119, Data owner,      READ,  TOPIC,     , ALLOWED",
+      "119, 119, Data scientist,  READ,  TOPIC,     , ALLOWED",
+      "119, 119, Data owner,      DESCRIBE,  TOPIC, , ALLOWED",
+      "119, 119, Data scientist,  DESCRIBE,  TOPIC, , ALLOWED",
+        // Shared with READ_ONLY permission
+      "119, 120, Data owner,      WRITE,  TOPIC,    READ_ONLY,  DENIED",
+      "119, 120, Data scientist,  WRITE,  TOPIC,    READ_ONLY,  DENIED",
+      "119, 120, Data owner,      CREATE,  TOPIC,    READ_ONLY,  DENIED",
+      "119, 120, Data scientist,  CREATE,  TOPIC,    READ_ONLY,  DENIED",
+      "119, 120, Data owner,      READ,  TOPIC,     READ_ONLY,  ALLOWED",
+      "119, 120, Data scientist,  READ,  TOPIC,     READ_ONLY,  ALLOWED",
+      "119, 120, Data owner,      DESCRIBE,  TOPIC, READ_ONLY,  ALLOWED",
+      "119, 120, Data scientist,  DESCRIBE,  TOPIC, READ_ONLY,  ALLOWED",
+        // Shared with not supported permission
+      "119, 120, Data owner,      WRITE,  TOPIC,    EDITABLE,   DENIED",
+      "119, 120, Data scientist,  WRITE,  TOPIC,    EDITABLE,   DENIED",
+      "119, 120, Data owner,      CREATE,  TOPIC,    EDITABLE,   DENIED",
+      "119, 120, Data scientist,  CREATE,  TOPIC,    EDITABLE,   DENIED",
+      "119, 120, Data owner,      READ,  TOPIC,     EDITABLE,   DENIED",
+      "119, 120, Data scientist,  READ,  TOPIC,     EDITABLE,   DENIED",
+      "119, 120, Data owner,      DESCRIBE,  TOPIC, EDITABLE,   DENIED",
+      "119, 120, Data scientist,  DESCRIBE,  TOPIC, EDITABLE,   DENIED",
+      // GROUP
+      "119, 119, Data owner,      READ,  GROUP,     , ALLOWED",
+      "119, 119, Data scientist,  READ,  GROUP,     , ALLOWED",
+      // CLUSTER (only IDEMPOTENT_WRITE is allowed)
+      "119, 119, Data owner,      IDEMPOTENT_WRITE,  CLUSTER, , ALLOWED",
+      "119, 119, Data scientist,  IDEMPOTENT_WRITE,  CLUSTER, , ALLOWED",
+      "119, 119, Data owner,      WRITE,  CLUSTER, , DENIED",
+      "119, 119, Data scientist,  WRITE,  CLUSTER, , DENIED",
+  })
+  public void testAuthorizeAllow(int topicProjectId, int userProjectId, String projectRole, String operationName, String resourceName,
+                                 String sharePermission, String expectedResult)
+      throws UnknownHostException, ExecutionException {
+    // Arrange
+    Mockito.when(topicProjectCache.get(anyString())).thenReturn(topicProjectId);
+    Mockito.when(userProjectCache.get(anyString())).thenReturn(new Pair<>(userProjectId, projectRole));
+    Mockito.when(projectShareCache.get(any())).thenReturn(sharePermission);
+
+    Action action = buildAction(operationName, resourceName, "test");
+
+    // Act
+    AuthorizationResult result = hopsAclAuthorizer.authorize("project__user", action);
+
+    // Assert
+    Assertions.assertEquals(AuthorizationResult.valueOf(expectedResult), result);
+    if (ResourceType.TOPIC.equals(ResourceType.fromString(resourceName))) {
+      Mockito.verify(topicProjectCache, Mockito.times(1)).get(anyString());
+      Mockito.verify(userProjectCache, Mockito.times(1)).get(anyString());
+      if (sharePermission != null) {
+        Mockito.verify(projectShareCache, Mockito.times(1)).get(any());
+      }
+    }
   }
 
   @ParameterizedTest
@@ -257,7 +268,6 @@ public class TestHopsAclAuthorizer {
   })
   public void testIsSuperUser(String principalName, String superUsersStr, boolean expectedResult) {
     // Arrange
-    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(null, null, null);
     hopsAclAuthorizer.setSuperUsers(superUsersStr);
 
     List<String> subjectNames = Arrays.asList(principalName.split(Consts.SEMI_COLON));
@@ -267,60 +277,6 @@ public class TestHopsAclAuthorizer {
 
     // Assert
     Assertions.assertEquals(expectedResult, result);
-  }
-
-  @ParameterizedTest
-  @CsvSource({
-      // Same project
-      "119, 119, Data owner,      Write,    , ALLOWED",
-      "119, 119, Data scientist,  Write,    , DENIED",
-      "119, 119, Data owner,      Read,     , ALLOWED",
-      "119, 119, Data scientist,  Read,     , ALLOWED",
-      "119, 119, Data owner,      Describe, , ALLOWED",
-      "119, 119, Data scientist,  Describe, , ALLOWED",
-      // Shared with READ_ONLY permission
-      "119, 120, Data owner,      Write,    READ_ONLY,  DENIED",
-      "119, 120, Data scientist,  Write,    READ_ONLY,  DENIED",
-      "119, 120, Data owner,      Read,     READ_ONLY,  ALLOWED",
-      "119, 120, Data scientist,  Read,     READ_ONLY,  ALLOWED",
-      "119, 120, Data owner,      Describe, READ_ONLY,  ALLOWED",
-      "119, 120, Data scientist,  Describe, READ_ONLY,  ALLOWED",
-      // Shared with not supported permission
-      "119, 120, Data owner,      Write,    EDITABLE,   DENIED",
-      "119, 120, Data scientist,  Write,    EDITABLE,   DENIED",
-      "119, 120, Data owner,      Read,     EDITABLE,   DENIED",
-      "119, 120, Data scientist,  Read,     EDITABLE,   DENIED",
-      "119, 120, Data owner,      Describe, EDITABLE,   DENIED",
-      "119, 120, Data scientist,  Describe, EDITABLE,   DENIED"
-  })
-  public void testAuthorizeAllow(int topicProjectId, int userProjectId, String projectRole, String operationType,
-                                 String sharePermission, String expectedResult)
-      throws UnknownHostException, ExecutionException {
-    // Arrange
-    LoadingCache<String, Integer> topicProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<String, Pair<Integer, String>> userProjectCache = Mockito.mock(LoadingCache.class);
-    LoadingCache<Pair<Integer, Integer>, String> projectShareCache = Mockito.mock(LoadingCache.class);
-
-    Mockito.when(topicProjectCache.get(anyString())).thenReturn(topicProjectId);
-    Mockito.when(userProjectCache.get(anyString())).thenReturn(new Pair<>(userProjectId, projectRole));
-    Mockito.when(projectShareCache.get(any())).thenReturn(sharePermission);
-
-    KafkaPrincipal kafkaPrincipal = new KafkaPrincipal("User", "project__user");
-    HopsAclAuthorizer hopsAclAuthorizer = new HopsAclAuthorizer(topicProjectCache, userProjectCache, projectShareCache);
-
-    RequestContext requestContext = buildRequestContext(kafkaPrincipal);
-    Action action = buildAction(operationType, "test");
-
-    // Act
-    AuthorizationResult result = hopsAclAuthorizer.authorize(requestContext, action);
-
-    // Assert
-    Assertions.assertEquals(AuthorizationResult.valueOf(expectedResult), result);
-    Mockito.verify(topicProjectCache, Mockito.times(1)).get(anyString());
-    Mockito.verify(userProjectCache, Mockito.times(1)).get(anyString());
-    if (sharePermission != null) {
-      Mockito.verify(projectShareCache, Mockito.times(1)).get(any());
-    }
   }
 
   private RequestContext buildRequestContext(KafkaPrincipal principal) throws UnknownHostException {
@@ -335,10 +291,10 @@ public class TestHopsAclAuthorizer {
         false);
   }
 
-  private Action buildAction(String operationName, String topicName) {
+  private Action buildAction(String operationName, String resourceName, String topicName) {
     return new Action(
         AclOperation.fromString(operationName),
-        new ResourcePattern(ResourceType.TOPIC, topicName, PatternType.LITERAL),
+        new ResourcePattern(ResourceType.fromString(resourceName), topicName, PatternType.LITERAL),
         0, false, false
     );
   }
