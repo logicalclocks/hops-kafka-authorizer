@@ -1,26 +1,14 @@
 # kafka-authorizer
 Kafka Authorization Engine for HopsWorks
 
-## Deploying/using authorizer
+## Building authorizer
 
 Create package with:
 
 ```sh
-mvn clean package
+mvn clean install
 ```
 
-Upload jar file:
+Create and push strimzi image using the new authorizer:
 
-```sh
-scp target/hops-kafka-authorizer-3.2.0-SNAPSHOT.jar dev3_vm:/srv/hops/kafka/libs
-```
-
-Change default configuartion (if needed) by editing `/etc/default/kafka` or `/srv/hops/kafka/bin/kafka-run-class.sh`
-
-Update log level (if needed) by editing `/srv/hops/kafka/config/log4j.properties`
-
-Afterwards restart service with:
-
-```sh
-systemctl restart kafka.service
-```
+https://github.com/logicalclocks/strimzi-kafka-operator/blob/main/development-docs/HOPSWORKS.md
