@@ -3,16 +3,14 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>hops.io.kafka</groupId>
   <artifactId>hops-kafka-authorizer</artifactId>
-  <version>4.6.0-SNAPSHOT</version>
+  <version>5.1.0-SNAPSHOT</version>
   <packaging>jar</packaging>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <maven.compiler.source>1.8</maven.compiler.source>
-    <maven.compiler.target>1.8</maven.compiler.target>
-    <kafka.version>3.9.0</kafka.version>
-    <scala.version>2.12</scala.version>
+    <!-- Kafka 4.x artifacts target Java 17; the broker itself also runs on 17+. -->
+    <maven.compiler.release>17</maven.compiler.release>
+    <kafka.version>4.3.0</kafka.version>
     <mysql.version>8.0.33</mysql.version>
-    <log4j.version>1.2.17</log4j.version>
     <guava.version>32.1.3-jre</guava.version>
     <hikariCP.version>2.6.0</hikariCP.version>
     <javatuples.version>1.2</javatuples.version>
@@ -21,9 +19,16 @@
     <slf4j.version>1.7.36</slf4j.version>
   </properties>
   <dependencies>
+    <!--
+      kafka-clients carries every Kafka API this plugin touches: the
+      org.apache.kafka.server.authorizer.* interfaces, org.apache.kafka.common.*, and
+      DefaultKafkaPrincipalBuilder. Kafka 4.0 dropped Scala 2.12, so depending on the
+      Scala kafka_<scala.version> artifact would tie us to Kafka's Scala version for no
+      benefit — nothing here imports kafka.* or scala.*.
+    -->
     <dependency>
       <groupId>org.apache.kafka</groupId>
-      <artifactId>kafka_${scala.version}</artifactId>
+      <artifactId>kafka-clients</artifactId>
       <version>${kafka.version}</version>
       <scope>provided</scope>
     </dependency>
@@ -37,11 +42,21 @@
       <artifactId>mysql-connector-j</artifactId>
       <version>${mysql.version}</version>
     </dependency>
+    <!--
+      Shaded in and relocated (see the shade plugin config below), not provided.
+      Strimzi's Kafka image does carry guava, but only incidentally: it arrives as a
+      transitive of io.grpc:grpc-netty-shaded in kafka-thirdparty-libs, and as the
+      -android flavour at a different major (33.5.0-android on Strimzi 1.1.0) than we
+      compile against. Relying on that is fragile - it disappears the day Strimzi drops
+      the OpenTelemetry/gRPC exporter stack - and bundling it unrelocated would put two
+      different com.google.common.cache implementations on the broker classpath, where
+      resolution order decides which one wins. Relocating gives us a private copy with
+      neither problem.
+    -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
       <version>${guava.version}</version>
-      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>com.zaxxer</groupId>
@@ -70,6 +85,15 @@
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <!--
+          Pinned: with no version Maven falls back to 3.1, which predates
+          maven.compiler.release and silently compiles with source/target 5.
+        -->
+        <version>3.13.0</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <!-- JUnit 5 requires Surefire version 2.22.0 or higher -->
         <version>3.0.0-M8</version>
@@ -77,7 +101,11 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <version>2.4.3</version>
+        <!--
+          3.x required: 2.4.3 bundles an ASM that cannot parse Java 17 class files, so
+          relocation fails with an opaque IllegalArgumentException.
+        -->
+        <version>3.6.0</version>
         <executions>
           <execution>
             <phase>package</phase>
@@ -91,10 +119,26 @@
                   <exclude>com.google.protobuf:protobuf-java</exclude>
                 </excludes>
               </artifactSet>
+              <relocations>
+                <!--
+                  Keep our guava private. The Kafka broker classpath also has a guava
+                  (transitive of grpc-netty-shaded in Strimzi's third-party libs, a
+                  different major and the -android flavour); without relocation both
+                  supply com.google.common.* and the winner depends on scan order.
+                -->
+                <relocation>
+                  <pattern>com.google.common</pattern>
+                  <shadedPattern>io.hops.kafka.shaded.com.google.common</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.google.thirdparty</pattern>
+                  <shadedPattern>io.hops.kafka.shaded.com.google.thirdparty</shadedPattern>
+                </relocation>
+              </relocations>
               <transformers>
                 <!-- add Main-Class to manifest file -->
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>hops.io.kafka.HopsAclAuthorizer</mainClass> 
+                  <mainClass>io.hops.kafka.HopsAclAuthorizer</mainClass>
                 </transformer>
               </transformers>
             </configuration>
