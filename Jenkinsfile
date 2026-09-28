@@ -22,7 +22,9 @@ pipeline {
             // The .m2 mount keeps downloads across builds. /opt/repository is the directory
             // repo.hops.works/master serves, and the publish stage writes into it, so it has
             // to be visible from inside the container.
-            args '-v $HOME/.m2:/var/maven/.m2 -e MAVEN_CONFIG=/var/maven/.m2 -v /opt/repository:/opt/repository'
+            // file-lock sync matches clusterj-onlinefs: $HOME/.m2 is shared between jobs on
+            // this agent, and Maven's default sync is not safe against a concurrent writer.
+            args '-v $HOME/.m2:/var/maven/.m2 -e MAVEN_CONFIG=/var/maven/.m2 -e MAVEN_OPTS=-Daether.syncContext.named.factory=file-lock -v /opt/repository:/opt/repository'
         }
     }
 
@@ -43,7 +45,10 @@ pipeline {
                     # Read the version from the pom rather than an injected variable. The
                     # freestyle job this replaced carried a stale POM_VERSION and published
                     # under 1.4.1-SNAPSHOT while the pom said 5.2.0-SNAPSHOT.
-                    VERSION=$(mvn -Duser.home=/var/maven -q -DforceStdout help:evaluate -Dexpression=project.version)
+                    # Plugin version pinned: bare `help:evaluate` resolves plugin metadata
+                    # from Maven Central on every run, which is subject to its rate limiting.
+                    VERSION=$(mvn -Duser.home=/var/maven -q -DforceStdout \
+                        org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=project.version)
                     JAR="target/hops-kafka-authorizer-${VERSION}.jar"
                     DEST="/opt/repository/master/hops-kafka-authorizer/${VERSION}"
 
@@ -51,10 +56,11 @@ pipeline {
                     mkdir -p "$DEST"
                     cp "$JAR" "$DEST/"
 
-                    # docker-images/strimzi-kafka pins this checksum and fails its build if it
-                    # does not match, so print it here: a jar rebuilt on a different toolchain
-                    # is not guaranteed to be byte-identical, and AUTHORIZER_SHA256 has to be
-                    # re-pinned from whatever is actually published.
+                    # Printed for traceability, not for a pin: docker-images/strimzi-kafka
+                    # fetches this jar by version with no checksum. Because the coordinate is
+                    # a SNAPSHOT, this cp overwrites whatever was there, so a rebuilt broker
+                    # image can pick up a different jar under the same tag. This line is the
+                    # record of which bytes a given run published.
                     echo "published ${VERSION} to ${DEST}"
                     sha256sum "$DEST/hops-kafka-authorizer-${VERSION}.jar"
                 '''

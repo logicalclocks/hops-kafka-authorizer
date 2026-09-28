@@ -41,7 +41,8 @@ public class DbConnection {
   }
   
   public DbConnection(String dbUrl, String dbUserName, String dbPassword, int maximumPoolSize,
-                      String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit) {
+                      String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit,
+                      long connectionTimeoutMs) {
     LOGGER.info("Initializing database pool to: {}", dbUrl);
     HikariConfig config = new HikariConfig();
     config.setJdbcUrl("jdbc:mysql://" + dbUrl);
@@ -56,17 +57,28 @@ public class DbConnection {
     // database.pool.size has therefore never had any effect - masked until now only because
     // the chart's default happens to be 10 as well.
     config.setMaximumPoolSize(maximumPoolSize);
-    // Build the pool without proving a connection first. HikariCP's default is to acquire one
-    // during construction and throw if it cannot, and this constructor runs inside
-    // Authorizer.configure() - where Kafka treats anything thrown as a fatal fault and
-    // terminates the process. A node whose DNS is not warm yet therefore dies rather than
-    // waits: observed on a freshly created KRaft controller, which crash-looped five times
-    // resolving mysql.service.consul while the broker beside it was serving happily.
+    // Bounds how long getConnection() blocks when no pooled connection is free - which, while
+    // the database is unreachable, is every call. That wait happens on a Kafka
+    // request-handler thread, so HikariCP's 30 s default lets a database outage occupy the
+    // broker's handler pool: measured at 60 s per authorization (this timeout x the two tries
+    // in HopsAclAuthorizer), and four producers were enough to stall an unrelated superuser
+    // request from 1.5 s to 22 s.
+    config.setConnectionTimeout(connectionTimeoutMs);
+    // Do not throw out of the constructor if the database is unreachable. This runs inside
+    // Authorizer.configure(), where Kafka treats anything thrown as a fatal fault and
+    // terminates the process, so a node whose DNS is not warm yet dies rather than waits:
+    // observed on a freshly created KRaft controller, which crash-looped five times resolving
+    // mysql.service.consul while the broker beside it was serving happily.
     //
-    // Deferring is safe because the lookup path already fails closed. A query against an
-    // unreachable database surfaces as ExecutionException in authorizeProjectUser, which
-    // retries and then returns DENIED - so an outage denies requests and logs loudly instead
-    // of taking the node down, and recovers on its own once the database answers.
+    // This does not make construction non-blocking. HikariCP's checkFailFast() still makes
+    // one synchronous connection attempt whatever this is set to; a negative value only stops
+    // it throwing. So a blackholed database still delays configure() by about
+    // connectionTimeout, which is the other reason to keep that short.
+    //
+    // Deferring the failure is safe because the lookup path fails closed. A query against an
+    // unreachable database surfaces as ExecutionException in authorizeProjectUser and ends in
+    // DENIED, so an outage denies requests and logs loudly instead of taking the node down,
+    // and recovers on its own once the database answers.
     config.setInitializationFailTimeout(-1);
     datasource = new HikariDataSource(config);
     LOGGER.info("Database pool created for: {} (connections are established on first use)", dbUrl);
