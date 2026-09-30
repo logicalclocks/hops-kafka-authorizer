@@ -47,9 +47,21 @@ pipeline {
             // stage overwrites in place, and docker-images pins its checksum - so a manual
             // run of any branch silently replaces the jar every broker image is built from.
             // That already happened once: build #1 published 5.2.0-SNAPSHOT from a fork
-            // branch. The job's SCM config builds */master and */branch-5*, so without this
+            // branch. The job's SCM config lists more than one branch spec, so without this
             // the guard does not exist anywhere.
-            when { branch 'master' }
+            //
+            // `branch 'master'` alone is not enough: it reads BRANCH_NAME, which only a
+            // multibranch pipeline sets. The jenkins.hops.works job is a plain "Pipeline
+            // script from SCM", where BRANCH_NAME is null, so that condition is never true
+            // and the stage is skipped on every run - a green build that publishes nothing.
+            // GIT_BRANCH is what the git plugin sets there (`origin/master`). Both are
+            // accepted so the stage keeps working if the job is ever made multibranch.
+            when {
+                anyOf {
+                    branch 'master'
+                    expression { env.GIT_BRANCH == 'origin/master' }
+                }
+            }
             steps {
                 sh '''
                     set -eu
@@ -69,11 +81,12 @@ pipeline {
 
                     # docker-images/strimzi-kafka pins AUTHORIZER_SHA256 and fails its build
                     # on a mismatch, so this sum is what the next re-pin uses. The coordinate
-                    # is a SNAPSHOT and this cp overwrites it in place, and the jar is not
-                    # reproducible (no project.build.outputTimestamp), so every publish here
-                    # invalidates that pin until someone moves it - and every older
+                    # is a SNAPSHOT and this cp overwrites it in place. The jar is
+                    # reproducible (project.build.outputTimestamp in the pom), so republishing
+                    # the same source leaves the sum unchanged; a publish that changes the
+                    # source invalidates the pin until someone moves it, and every older
                     # docker-images commit stops building too. A released authorizer version
-                    # is the real fix; the branch guard below at least keeps stray branch
+                    # is the real fix; the branch guard above at least keeps stray branch
                     # builds from doing it.
                     echo "published ${VERSION} to ${DEST}"
                     sha256sum "$DEST/hops-kafka-authorizer-${VERSION}.jar"

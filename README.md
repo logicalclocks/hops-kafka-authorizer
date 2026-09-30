@@ -29,6 +29,8 @@ new jar breaks that build until two files there are updated in the same change**
 Then bump `cluster.kafka.image.tag` in `charts/kafka/values.yaml` in `hopsworks-helm`
 to the new `-h<n>`.
 
-The jar is not reproducible (no `project.build.outputTimestamp`), so the checksum changes on
-every publish even when the source does not. The real fix is publishing immutable releases
-rather than SNAPSHOTs; until then the pin has to be moved by hand.
+The jar is reproducible (`project.build.outputTimestamp` in the pom), so republishing the
+same commit leaves the checksum unchanged and a local `mvn clean package` of a commit gives
+the sum its publish will have. The pin still has to move whenever the source changes. The
+real fix is publishing immutable releases rather than SNAPSHOTs; until then it is moved by
+hand.
