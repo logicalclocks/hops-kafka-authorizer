@@ -39,8 +39,11 @@ public final class Consts {
   // number for a web request and far too long here - four producers were enough to occupy
   // every handler and take an unrelated superuser `kafka-topics --list` from 1.5 s to 22 s.
   public static final String DATABASE_CONNECTION_TIMEOUT_MS = "database.pool.connection.timeout.ms";
-  // HikariCP rejects anything below 250 ms.
   public static final long DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT = 3000L;
+  // HikariCP's own floor. Anything lower makes it throw, and 0 is worse than low: it maps to
+  // Integer.MAX_VALUE, so getConnection() would block a request-handler thread for ~24.8 days.
+  // DbConnection.resolveConnectionTimeoutMs falls back to the default rather than either.
+  public static final long DATABASE_CONNECTION_TIMEOUT_MS_MIN = 250L;
   public static final String DATABASE_ACL_POLLING_FREQUENCY_MS = "acl.polling.frequency.ms";
   public static final String CONSUMER_OFFSETS_ACCESS_ALLOWED = "consumer_offsets.access_allowed";
   public static final String CACHE_MAX_SIZE = "cache.max_size";

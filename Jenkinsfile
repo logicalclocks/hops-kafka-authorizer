@@ -24,7 +24,11 @@ pipeline {
             // to be visible from inside the container.
             // file-lock sync matches clusterj-onlinefs: $HOME/.m2 is shared between jobs on
             // this agent, and Maven's default sync is not safe against a concurrent writer.
-            args '-v $HOME/.m2:/var/maven/.m2 -e MAVEN_CONFIG=/var/maven/.m2 -e MAVEN_OPTS=-Daether.syncContext.named.factory=file-lock -v /opt/repository:/opt/repository'
+            // Both properties are required - Maven 3.9.11 refuses file-lock on its own with
+            // "FileLockNamedLockFactory lock factory requires FS friendly NameMapper" - and
+            // they go in MAVEN_ARGS, not MAVEN_OPTS: MAVEN_OPTS is JVM flags, so -D there
+            // would not reach the resolver.
+            args '-v $HOME/.m2:/var/maven/.m2 -e MAVEN_CONFIG=/var/maven/.m2 -e MAVEN_ARGS="-Daether.syncContext.named.factory=file-lock -Daether.syncContext.named.nameMapper=file-gav" -v /opt/repository:/opt/repository'
         }
     }
 
@@ -39,6 +43,13 @@ pipeline {
         // failed, so a compile error can no longer be followed by a "cp: cannot stat" that
         // buries the real cause.
         stage('publish') {
+            // Only master publishes. The coordinate is a single SNAPSHOT file that this
+            // stage overwrites in place, and docker-images pins its checksum - so a manual
+            // run of any branch silently replaces the jar every broker image is built from.
+            // That already happened once: build #1 published 5.2.0-SNAPSHOT from a fork
+            // branch. The job's SCM config builds */master and */branch-5*, so without this
+            // the guard does not exist anywhere.
+            when { branch 'master' }
             steps {
                 sh '''
                     set -eu
@@ -56,11 +67,14 @@ pipeline {
                     mkdir -p "$DEST"
                     cp "$JAR" "$DEST/"
 
-                    # Printed for traceability, not for a pin: docker-images/strimzi-kafka
-                    # fetches this jar by version with no checksum. Because the coordinate is
-                    # a SNAPSHOT, this cp overwrites whatever was there, so a rebuilt broker
-                    # image can pick up a different jar under the same tag. This line is the
-                    # record of which bytes a given run published.
+                    # docker-images/strimzi-kafka pins AUTHORIZER_SHA256 and fails its build
+                    # on a mismatch, so this sum is what the next re-pin uses. The coordinate
+                    # is a SNAPSHOT and this cp overwrites it in place, and the jar is not
+                    # reproducible (no project.build.outputTimestamp), so every publish here
+                    # invalidates that pin until someone moves it - and every older
+                    # docker-images commit stops building too. A released authorizer version
+                    # is the real fix; the branch guard below at least keeps stray branch
+                    # builds from doing it.
                     echo "published ${VERSION} to ${DEST}"
                     sha256sum "$DEST/hops-kafka-authorizer-${VERSION}.jar"
                 '''

@@ -40,6 +40,40 @@ public class DbConnection {
     this.datasource = datasource;
   }
   
+  /**
+   * Resolve {@code database.pool.connection.timeout.ms} from the broker config.
+   *
+   * Never throws. This is read inside Authorizer.configure(), where Kafka treats anything
+   * thrown as a fatal fault and kills the process - so a typo in a broker property would take
+   * the node down, which is the failure mode this class exists to avoid. A bad value falls
+   * back to the default and says so.
+   *
+   * Rejects 0 explicitly: HikariCP maps it to Integer.MAX_VALUE, i.e. wait forever, which is
+   * the opposite of what this setting is for and would park request-handler threads for
+   * ~24.8 days. Values below HikariCP's 250 ms minimum are rejected for the same reason - it
+   * would throw on them.
+   */
+  static long resolveConnectionTimeoutMs(Object raw) {
+    if (raw == null) {
+      return Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT;
+    }
+    long parsed;
+    try {
+      parsed = Long.parseLong(raw.toString().trim());
+    } catch (NumberFormatException e) {
+      LOGGER.warn("{} is not a number: '{}'. Using {} ms.", Consts.DATABASE_CONNECTION_TIMEOUT_MS,
+          raw, Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT);
+      return Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT;
+    }
+    if (parsed < Consts.DATABASE_CONNECTION_TIMEOUT_MS_MIN) {
+      LOGGER.warn("{}={} is below the {} ms minimum (0 would mean wait forever). Using {} ms.",
+          Consts.DATABASE_CONNECTION_TIMEOUT_MS, parsed, Consts.DATABASE_CONNECTION_TIMEOUT_MS_MIN,
+          Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT);
+      return Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT;
+    }
+    return parsed;
+  }
+
   public DbConnection(String dbUrl, String dbUserName, String dbPassword, int maximumPoolSize,
                       String cachePrepStmts, String prepStmtCacheSize, String prepStmtCacheSqlLimit,
                       long connectionTimeoutMs) {
@@ -64,6 +98,13 @@ public class DbConnection {
     // in HopsAclAuthorizer), and four producers were enough to stall an unrelated superuser
     // request from 1.5 s to 22 s.
     config.setConnectionTimeout(connectionTimeoutMs);
+    // Below connectionTimeout on purpose. On borrow, HikariCP validates an idle pooled
+    // connection with isValid(validationTimeout) before it rechecks the borrow deadline, so
+    // leaving this at its 5000 ms default would let a lookup take ~5 s once the database goes
+    // away with connections already in the pool - longer than the timeout we just set. Halved
+    // rather than matched so validation cannot consume the entire borrow budget, and floored
+    // at HikariCP's own 250 ms minimum.
+    config.setValidationTimeout(Math.max(250L, connectionTimeoutMs / 2));
     // Do not throw out of the constructor if the database is unreachable. This runs inside
     // Authorizer.configure(), where Kafka treats anything thrown as a fatal fault and
     // terminates the process, so a node whose DNS is not warm yet dies rather than waits:

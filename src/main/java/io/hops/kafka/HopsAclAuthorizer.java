@@ -98,10 +98,9 @@ public class HopsAclAuthorizer implements Authorizer {
         configs.get(Consts.DATABASE_CACHE_PREPSTMTS).toString(),
         configs.get(Consts.DATABASE_PREPSTMT_CACHE_SIZE).toString(),
         configs.get(Consts.DATABASE_PREPSTMT_CACHE_SQL_LIMIT).toString(),
-        // Optional: brokers deployed before this key existed simply do not set it.
-        configs.containsKey(Consts.DATABASE_CONNECTION_TIMEOUT_MS)
-            ? Long.parseLong(configs.get(Consts.DATABASE_CONNECTION_TIMEOUT_MS).toString())
-            : Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT);
+        // Optional, and never fatal: brokers deployed before this key existed do not set it,
+        // and a bad value must not throw out of configure().
+        DbConnection.resolveConnectionTimeoutMs(configs.get(Consts.DATABASE_CONNECTION_TIMEOUT_MS)));
 
     long expireDuration = Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS)));
     long cacheMaxSize = Long.parseLong(String.valueOf(configs.get(Consts.CACHE_MAX_SIZE)));
