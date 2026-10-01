@@ -21,6 +21,7 @@ import org.mockito.Mockito;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -107,6 +108,62 @@ public class TestHopsAclAuthorizer {
     Mockito.verify(topicProjectCache, Mockito.times(2)).get(anyString());
     Mockito.verify(userProjectCache, Mockito.times(0)).get(anyString());
     Mockito.verify(projectShareCache, Mockito.times(0)).get(any());
+  }
+
+  @Test
+  public void testAuthorizeDatabaseUnreachableDeniesWithoutRetry() throws UnknownHostException, ExecutionException {
+    // Arrange: a HikariCP pool timeout reaches the cache loader as SQLTransientConnectionException
+    Mockito.when(topicProjectCache.get(anyString())).thenThrow(new ExecutionException(
+        new SQLTransientConnectionException("Connection is not available, request timed out after 1000ms.")));
+
+    Action action = buildAction("describe", "TOPIC", "test");
+
+    // Act
+    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
+
+    // Assert: denied on the first attempt, no second trip through the pool timeout
+    Assertions.assertEquals(AuthorizationResult.DENIED, authorizationResult);
+    Mockito.verify(topicProjectCache, Mockito.times(1)).get(anyString());
+    Mockito.verify(userProjectCache, Mockito.times(0)).get(anyString());
+    Mockito.verify(projectShareCache, Mockito.times(0)).get(any());
+  }
+
+  @Test
+  public void testAuthorizeDatabaseUnreachableNestedCauseDeniesWithoutRetry()
+      throws UnknownHostException, ExecutionException {
+    // Arrange: the pool timeout may sit below another wrapper; the cause chain is walked
+    Mockito.when(topicProjectCache.get(anyString())).thenThrow(new ExecutionException(
+        new RuntimeException(new SQLTransientConnectionException("Connection is not available"))));
+
+    Action action = buildAction("describe", "TOPIC", "test");
+
+    // Act
+    AuthorizationResult authorizationResult = hopsAclAuthorizer.authorize("project__user", action);
+
+    // Assert
+    Assertions.assertEquals(AuthorizationResult.DENIED, authorizationResult);
+    Mockito.verify(topicProjectCache, Mockito.times(1)).get(anyString());
+  }
+
+  @Test
+  public void testAuthorizeRecoversAfterDatabaseUnreachable() throws UnknownHostException, ExecutionException {
+    // Arrange: the database is unreachable for the first request and back for the second
+    Mockito.when(topicProjectCache.get(anyString()))
+        .thenThrow(new ExecutionException(new SQLTransientConnectionException("Connection is not available")))
+        .thenReturn(119);
+    Mockito.when(userProjectCache.get(anyString())).thenReturn(new Pair<>(119, Consts.DATA_OWNER));
+
+    Action action = buildAction("describe", "TOPIC", "test");
+
+    // Act
+    AuthorizationResult first = hopsAclAuthorizer.authorize("project__user", action);
+    AuthorizationResult second = hopsAclAuthorizer.authorize("project__user", action);
+
+    // Assert: nothing is latched, the next request goes back to the database
+    Assertions.assertEquals(AuthorizationResult.DENIED, first);
+    Assertions.assertEquals(AuthorizationResult.ALLOWED, second);
+    Mockito.verify(topicProjectCache, Mockito.times(2)).get(anyString());
+    Mockito.verify(userProjectCache, Mockito.times(1)).get(anyString());
   }
 
   @Test

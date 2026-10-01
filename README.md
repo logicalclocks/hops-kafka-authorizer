@@ -13,8 +13,8 @@ mvn clean install
 
 The Jenkins job publishes to `repo.hops.works` under the SNAPSHOT coordinate
 `hops-kafka-authorizer/<version>-SNAPSHOT`, overwriting whatever was there. Only `master`
-publishes; a run of any other branch builds and tests but does not upload, because that path
-is what every broker image resolves.
+and the `release-*` branches publish, each to its own pom version; a run of any other branch
+builds and tests but does not upload, because that path is what every broker image resolves.
 
 The broker image is built in
 [`docker-images/strimzi-kafka`](https://github.com/logicalclocks/docker-images/tree/master/strimzi-kafka)

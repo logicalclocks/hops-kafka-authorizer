@@ -111,10 +111,11 @@ public class DbConnection {
     // observed on a freshly created KRaft controller, which crash-looped five times resolving
     // mysql.service.consul while the broker beside it was serving happily.
     //
-    // This does not make construction non-blocking. HikariCP's checkFailFast() still makes
-    // one synchronous connection attempt whatever this is set to; a negative value only stops
-    // it throwing. So a blackholed database still delays configure() by about
-    // connectionTimeout, which is the other reason to keep that short.
+    // With a negative value HikariCP (3.x and later; this needs at least that) skips its
+    // start-up connection attempt entirely, so construction neither throws nor blocks and the
+    // first connection is made on first use. 2.6.0 still made one synchronous attempt here and
+    // threw PoolInitializationException when a connection opened but its setup failed, which
+    // was a second way for configure() to take the node down.
     //
     // Deferring the failure is safe because the lookup path fails closed. A query against an
     // unreachable database surfaces as ExecutionException in authorizeProjectUser and ends in

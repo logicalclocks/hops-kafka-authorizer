@@ -43,12 +43,13 @@ pipeline {
         // failed, so a compile error can no longer be followed by a "cp: cannot stat" that
         // buries the real cause.
         stage('publish') {
-            // Only master publishes. The coordinate is a single SNAPSHOT file that this
-            // stage overwrites in place, and docker-images pins its checksum - so a manual
-            // run of any branch silently replaces the jar every broker image is built from.
-            // That already happened once: build #1 published 5.2.0-SNAPSHOT from a fork
-            // branch. The job's SCM config lists more than one branch spec, so without this
-            // the guard does not exist anywhere.
+            // Only master and the release-* branches publish. The coordinate is a single
+            // SNAPSHOT file per pom version that this stage overwrites in place, and
+            // docker-images pins its checksum - so a manual run of any other branch silently
+            // replaces the jar every broker image is built from. That already happened once:
+            // build #1 published 5.2.0-SNAPSHOT from a fork branch. Release branches carry
+            // their own pom version (master is the Kafka 4.x line; the 3.x line that 5.0 and
+            // 5.1 run is a release-* branch), so they publish to their own coordinate.
             //
             // `branch 'master'` alone is not enough: it reads BRANCH_NAME, which only a
             // multibranch pipeline sets. The jenkins.hops.works job is a plain "Pipeline
@@ -59,7 +60,8 @@ pipeline {
             when {
                 anyOf {
                     branch 'master'
-                    expression { env.GIT_BRANCH == 'origin/master' }
+                    branch 'release-*'
+                    expression { env.GIT_BRANCH ==~ /origin\/(master|release-.*)/ }
                 }
             }
             steps {
