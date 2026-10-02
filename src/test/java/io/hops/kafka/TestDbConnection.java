@@ -201,4 +201,48 @@ public class TestDbConnection {
     Mockito.verify(preparedStatement, Mockito.times(1)).close();
     Mockito.verify(resultSet, Mockito.times(0)).close();
   }
+
+  // ---- resolveConnectionTimeoutMs -----------------------------------------
+  //
+  // This runs inside Authorizer.configure(), where Kafka treats a throw as a fatal fault and
+  // kills the broker, so every one of these must return a usable value rather than raise.
+
+  @Test
+  public void resolveConnectionTimeout_absentUsesDefault() {
+    Assertions.assertEquals(Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT,
+        DbConnection.resolveConnectionTimeoutMs(null));
+  }
+
+  @Test
+  public void resolveConnectionTimeout_validValueIsKept() {
+    Assertions.assertEquals(5000L, DbConnection.resolveConnectionTimeoutMs("5000"));
+    Assertions.assertEquals(250L, DbConnection.resolveConnectionTimeoutMs("250"));
+    Assertions.assertEquals(1500L, DbConnection.resolveConnectionTimeoutMs(" 1500 "));
+  }
+
+  @Test
+  public void resolveConnectionTimeout_zeroMeansForeverSoIsRejected() {
+    // HikariCP maps 0 to Integer.MAX_VALUE - a request-handler thread parked for ~24.8 days.
+    Assertions.assertEquals(Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT,
+        DbConnection.resolveConnectionTimeoutMs("0"));
+  }
+
+  @Test
+  public void resolveConnectionTimeout_belowHikariMinimumIsRejected() {
+    // HikariCP throws on these; falling back is what keeps configure() non-fatal.
+    Assertions.assertEquals(Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT,
+        DbConnection.resolveConnectionTimeoutMs("249"));
+    Assertions.assertEquals(Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT,
+        DbConnection.resolveConnectionTimeoutMs("1"));
+    Assertions.assertEquals(Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT,
+        DbConnection.resolveConnectionTimeoutMs("-1"));
+  }
+
+  @Test
+  public void resolveConnectionTimeout_garbageDoesNotThrow() {
+    Assertions.assertEquals(Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT,
+        DbConnection.resolveConnectionTimeoutMs("not-a-number"));
+    Assertions.assertEquals(Consts.DATABASE_CONNECTION_TIMEOUT_MS_DEFAULT,
+        DbConnection.resolveConnectionTimeoutMs(""));
+  }
 }

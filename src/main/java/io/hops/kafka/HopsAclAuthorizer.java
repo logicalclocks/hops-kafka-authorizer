@@ -18,6 +18,7 @@ import org.apache.kafka.server.authorizer.Authorizer;
 import org.apache.kafka.server.authorizer.AuthorizerServerInfo;
 
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -96,7 +97,10 @@ public class HopsAclAuthorizer implements Authorizer {
         Integer.parseInt(configs.get(Consts.DATABASE_MAX_POOL_SIZE).toString()),
         configs.get(Consts.DATABASE_CACHE_PREPSTMTS).toString(),
         configs.get(Consts.DATABASE_PREPSTMT_CACHE_SIZE).toString(),
-        configs.get(Consts.DATABASE_PREPSTMT_CACHE_SQL_LIMIT).toString());
+        configs.get(Consts.DATABASE_PREPSTMT_CACHE_SQL_LIMIT).toString(),
+        // Optional, and never fatal: brokers deployed before this key existed do not set it,
+        // and a bad value must not throw out of configure().
+        DbConnection.resolveConnectionTimeoutMs(configs.get(Consts.DATABASE_CONNECTION_TIMEOUT_MS)));
 
     long expireDuration = Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS)));
     long cacheMaxSize = Long.parseLong(String.valueOf(configs.get(Consts.CACHE_MAX_SIZE)));
@@ -224,6 +228,20 @@ public class HopsAclAuthorizer implements Authorizer {
     return AuthorizationResult.DENIED;
   }
 
+  /**
+   * True when the failure is HikariCP giving up on handing out a connection, which it reports
+   * as SQLTransientConnectionException ("Connection is not available, request timed out").
+   * Walks the cause chain because the cache wraps whatever the loader threw.
+   */
+  private static boolean isConnectionUnavailable(Throwable t) {
+    for (Throwable c = t; c != null; c = c.getCause()) {
+      if (c instanceof SQLTransientConnectionException) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private AuthorizationResult authorizeProjectUser(String topicName, String principalName, AclOperation operation) {
     int tries = 2;
     while (tries > 0) {
@@ -247,6 +265,16 @@ public class HopsAclAuthorizer implements Authorizer {
           return authorizePermission(operation, sharePermission);
         }
       } catch (ExecutionException e) {
+        // A pool timeout means the database is unreachable, not that this attempt was
+        // unlucky, so retrying only spends another full connectionTimeout on a
+        // request-handler thread and doubles the stall the broker suffers during an outage.
+        // Every other ExecutionException keeps the retry, which is what covers a dropped
+        // connection or a transient driver error.
+        if (isConnectionUnavailable(e)) {
+          LOGGER.error("Database unreachable while authorizing user '{}' to perform '{}' on topic '{}';"
+              + " denying without retry", principalName, operation.toString(), topicName, e.getCause());
+          return AuthorizationResult.DENIED;
+        }
         tries--;
         LOGGER.error("Failed to authorize user '{}' to perform '{}' on topic '{}', retries left: {}",
             principalName, operation.toString(), topicName, tries, e.getCause());
