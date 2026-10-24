@@ -1,5 +1,7 @@
 package io.hops.kafka;
 
+import com.google.common.base.Ticker;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import org.apache.kafka.common.acl.AclOperation;
@@ -25,6 +27,9 @@ import java.sql.SQLTransientConnectionException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -334,6 +339,51 @@ public class TestHopsAclAuthorizer {
 
     // Assert
     Assertions.assertEquals(expectedResult, result);
+  }
+
+  @Test
+  public void testTopicProjectCacheExpires() throws ExecutionException {
+    // Arrange: the topic's project id changes in the database, as when a project name is reused
+    long expireMs = 1000;
+    AtomicLong nanos = new AtomicLong();
+    AtomicInteger dbProjectId = new AtomicInteger(14578);
+    LoadingCache<String, Integer> realTopicProject = HopsAclAuthorizer.buildTopicProjectCache(
+        100, expireMs, new Ticker() {
+          @Override
+          public long read() {
+            return nanos.get();
+          }
+        },
+        new CacheLoader<String, Integer>() {
+          @Override
+          public Integer load(String topicName) {
+            return dbProjectId.get();
+          }
+        });
+    // No share row between the deleted project and the new one
+    Mockito.when(projectShareCache.get(any())).thenThrow(new CacheLoader.InvalidCacheLoadException(""));
+    HopsAclAuthorizer authorizer = new HopsAclAuthorizer(
+        realTopicProject, fixedUserProject(14585), projectShareCache, dbConnection);
+    Action write = buildAction("WRITE", "TOPIC", "project_onlinefs");
+
+    // Act and Assert: the old id is served before expiry, so the write looks cross-project
+    Assertions.assertEquals(AuthorizationResult.DENIED, authorizer.authorize("project__user", write));
+    dbProjectId.set(14585);
+    nanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(expireMs - 1));
+    Assertions.assertEquals(AuthorizationResult.DENIED, authorizer.authorize("project__user", write));
+
+    // After expiry the new id loads and the write is allowed
+    nanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(2));
+    Assertions.assertEquals(AuthorizationResult.ALLOWED, authorizer.authorize("project__user", write));
+  }
+
+  private LoadingCache<String, Pair<Integer, String>> fixedUserProject(int projectId) {
+    return CacheBuilder.newBuilder().build(new CacheLoader<String, Pair<Integer, String>>() {
+      @Override
+      public Pair<Integer, String> load(String principalName) {
+        return new Pair<>(projectId, Consts.DATA_OWNER);
+      }
+    });
   }
 
   private RequestContext buildRequestContext(KafkaPrincipal principal) throws UnknownHostException {
