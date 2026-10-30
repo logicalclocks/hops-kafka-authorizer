@@ -26,7 +26,7 @@ public class DbConnection {
       "FROM project_team pt " +
       "JOIN project p ON pt.project_id = p.id " +
       "JOIN users u ON pt.team_member = u.email " +
-      "WHERE p.projectname = ? AND u.username = ?";
+      "WHERE p.backing_name = ? AND u.username = ?";
 
   private static final String SQL_SELECT_SHARED_PROJECT = "SELECT dsw.permission " +
       "FROM dataset_shared_with dsw " +
@@ -138,10 +138,10 @@ public class DbConnection {
     }
   }
 
-  public Pair<Integer, String> getProjectRole(String projectName, String username) throws SQLException {
+  public Pair<Integer, String> getProjectRole(String backingName, String username) throws SQLException {
     try (Connection connection = datasource.getConnection();
          PreparedStatement preparedStatement = connection.prepareStatement(SQL_SELECT_PROJECT_ROLE)) {
-      preparedStatement.setString(1, projectName);
+      preparedStatement.setString(1, backingName);
       preparedStatement.setString(2, username);
       try(ResultSet resultSet = preparedStatement.executeQuery()) {
         if (resultSet.next())

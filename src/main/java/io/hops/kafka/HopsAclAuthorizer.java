@@ -1,5 +1,6 @@
 package io.hops.kafka;
 
+import com.google.common.base.Ticker;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -72,6 +73,16 @@ public class HopsAclAuthorizer implements Authorizer {
     this.dbConnection = dbConnection;
   }
 
+  // Package-private so the test builds the cache exactly as configure() does.
+  static LoadingCache<String, Integer> buildTopicProjectCache(long maxSize, long expireMs, Ticker ticker,
+                                                              CacheLoader<String, Integer> loader) {
+    return CacheBuilder.newBuilder()
+        .maximumSize(maxSize)
+        .expireAfterWrite(expireMs, TimeUnit.MILLISECONDS)
+        .ticker(ticker)
+        .build(loader);
+  }
+
   /**
    * Guaranteed to be called before any authorize call is made.
    *
@@ -104,9 +115,8 @@ public class HopsAclAuthorizer implements Authorizer {
 
     long expireDuration = Long.parseLong(String.valueOf(configs.get(Consts.DATABASE_ACL_POLLING_FREQUENCY_MS)));
     long cacheMaxSize = Long.parseLong(String.valueOf(configs.get(Consts.CACHE_MAX_SIZE)));
-    topicProject = CacheBuilder.newBuilder()
-        .maximumSize(cacheMaxSize)
-        .build(new CacheLoader<String, Integer>() {
+    topicProject = buildTopicProjectCache(cacheMaxSize, expireDuration, Ticker.systemTicker(),
+        new CacheLoader<String, Integer>() {
           @Override
           public Integer load(String topicName) throws SQLException {
             LOGGER.info("Getting topics project. topicName: {}", topicName);
@@ -119,11 +129,12 @@ public class HopsAclAuthorizer implements Authorizer {
           @Override
           public Pair<Integer, String> load(String principalName) throws SQLException {
             String[] principalNameSplit = principalName.split(Consts.PROJECT_USER_DELIMITER);
-            String projectName = principalNameSplit[0];
+            // The certificate CN is <project backing name>__<username>.
+            String backingName = principalNameSplit[0];
             String username = principalNameSplit[1];
-            LOGGER.info("Getting users project role. projectName: {}, username: {}",
-                projectName, username);
-            return dbConnection.getProjectRole(projectName, username);
+            LOGGER.info("Getting users project role. backingName: {}, username: {}",
+                backingName, username);
+            return dbConnection.getProjectRole(backingName, username);
           }
         });
     projectShare = CacheBuilder.newBuilder()
